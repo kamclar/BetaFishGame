@@ -1,7 +1,7 @@
 const SAVE_KEY = "beta-fish-game.save.v1";
 
 export function saveGame(state) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, savedAt: Date.now(), ...state }));
+  localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 2, savedAt: Date.now(), ...state }));
 }
 
 export function loadGame() {

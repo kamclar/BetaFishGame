@@ -11,6 +11,7 @@ import { applyTankEffects, cleanTank, describeWater, formatGameTime, gameClock, 
 import { actionCosts, canAfford, economy, initializeEconomy, payForAction, recordAction, taskText } from "./systems/economySystem.js";
 import { loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
+import { breedPair, findMate, initializeBreeding } from "./systems/breedingSystem.js";
 import {
   exposeTankToTrouble,
   getActiveSymptoms,
@@ -29,6 +30,7 @@ loadFishSpriteAssets();
 initializeEconomy();
 restoreSavedGame();
 for (const item of fish) initializeLifecycle(item);
+initializeBreeding(fish);
 
 let selectedFish = null;
 let lastTime = performance.now();
@@ -113,7 +115,7 @@ function update(delta) {
 function draw() {
   const view = getView();
   ctx.clearRect(0, 0, view.width, view.height);
-  drawAquarium(ctx, view, plants[currentTank]);
+  drawAquarium(ctx, view, plants[currentTank], currentTank);
 
   const glass = getGlassBounds(view);
   ctx.save();
@@ -193,6 +195,23 @@ function treatSelectedFish() {
   addLog(ui, `${selectedFish.name}: lek zmirnil ${removedSymptom}.`);
 }
 
+function breedSelectedFish() {
+  if (!selectedFish) return;
+  const mate = findMate(selectedFish, fish);
+  if (!mate) {
+    addJournalEntry(ui, `${selectedFish.name}: chybi zdravy dospely partner opacneho pohlavi ve stejne nadrzi.`);
+    return;
+  }
+  const babies = breedPair(selectedFish, mate, fish);
+  babies.forEach(initializeLifecycle);
+  addFishHistory(ui, selectedFish, `Potomci s rybou ${mate.name}: ${babies.map((baby) => baby.name).join(", ")}.`);
+  addJournalEntry(ui, `V odchovne se narodil poter: ${babies.map((baby) => baby.name).join(" a ")}.`);
+  currentTank = "nursery";
+  updateTankTabs(ui, tanks, currentTank);
+  selectedFish = babies[0];
+  renderFishCard(ui, selectedFish);
+}
+
 canvas.addEventListener("click", (event) => {
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -246,6 +265,7 @@ document.getElementById("fishCardCloseButton").addEventListener("click", deselec
 
 ui.moveFishButton.addEventListener("click", moveSelectedFish);
 ui.treatFishButton.addEventListener("click", treatSelectedFish);
+ui.breedFishButton.addEventListener("click", breedSelectedFish);
 
 for (const tab of ui.tankTabs) {
   tab.addEventListener("click", () => switchTank(tab.dataset.tank));
@@ -355,10 +375,16 @@ function restoreSavedGame() {
   const saved = loadGame();
   if (!saved) return;
   restoreArray(fish, saved.fish);
+  if ((saved.version ?? 1) < 2) {
+    const starterMale = fish.find((item) => item.id === "f2");
+    if (starterMale) starterMale.ageDays = Math.max(32, starterMale.ageDays ?? 0);
+  }
   restoreArray(plants.main, saved.plants?.main);
   restoreArray(plants.quarantine, saved.plants?.quarantine);
+  restoreArray(plants.nursery, saved.plants?.nursery);
   restoreObject(tanks.main, saved.tanks?.main);
   restoreObject(tanks.quarantine, saved.tanks?.quarantine);
+  restoreObject(tanks.nursery, saved.tanks?.nursery);
   restoreObject(economy, saved.economy);
   if (saved.gameClock) {
     gameClock.day = saved.gameClock.day ?? gameClock.day;

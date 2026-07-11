@@ -10,6 +10,9 @@ export function createUi() {
     fishHunger: document.getElementById("fishHunger"),
     fishAge: document.getElementById("fishAge"),
     fishRarity: document.getElementById("fishRarity"),
+    fishSex: document.getElementById("fishSex"),
+    fishParents: document.getElementById("fishParents"),
+    fishOffspring: document.getElementById("fishOffspring"),
     fishHistory: document.getElementById("fishHistory"),
     tankLabel: document.getElementById("tankLabel"),
     tankName: document.getElementById("tankName"),
@@ -18,6 +21,7 @@ export function createUi() {
     journalLog: document.getElementById("journalLog"),
     moveFishButton: document.getElementById("moveFishButton"),
     treatFishButton: document.getElementById("treatFishButton"),
+    breedFishButton: document.getElementById("breedFishButton"),
     tankTabs: [...document.querySelectorAll(".tank-tab")],
     appShell: document.querySelector(".app-shell"),
     heldCursor: document.getElementById("heldCursor"),
@@ -46,6 +50,9 @@ export function renderFishCard(ui, item) {
   ui.fishSpecies.textContent = item.species;
   ui.fishAge.textContent = item.age;
   ui.fishRarity.textContent = item.rarity;
+  ui.fishSex.textContent = item.sex ?? "nezname";
+  ui.fishParents.textContent = item.parents?.length ? item.parents.join(", ") : "neznamí";
+  ui.fishOffspring.textContent = String(item.offspring?.length ?? 0);
   ui.traitList.innerHTML = "";
   renderFishHistory(ui, item);
 
@@ -68,6 +75,9 @@ export function clearFishCard(ui) {
   ui.fishHunger.textContent = "-";
   ui.fishAge.textContent = "-";
   ui.fishRarity.textContent = "-";
+  ui.fishSex.textContent = "-";
+  ui.fishParents.textContent = "-";
+  ui.fishOffspring.textContent = "-";
   ui.traitList.innerHTML = "";
   ui.symptomList.innerHTML = "";
   ui.fishHistory.innerHTML = "";
@@ -125,6 +135,7 @@ function updateFishActionButtons(ui, item) {
   const hasFish = Boolean(item);
   ui.moveFishButton.disabled = !hasFish;
   ui.treatFishButton.disabled = !hasFish || (item.symptoms.length === 0 && item.diseases.length === 0);
+  ui.breedFishButton.disabled = !hasFish || !item.canBreed;
   if (!hasFish) {
     ui.moveFishButton.textContent = "Presunout do karanteny";
     return;

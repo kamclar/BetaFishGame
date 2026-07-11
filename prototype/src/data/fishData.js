@@ -41,8 +41,8 @@ export const fish = [
     name: "Jehla",
     species: "Jehlova bludicka",
     rarity: "Uncommon",
-    age: "19 dni",
-    ageDays: 19,
+    age: "32 dni",
+    ageDays: 32,
     health: 88,
     stress: 16,
     hunger: 41,
@@ -182,6 +182,7 @@ export const plants = {
   createPlant("glowFern", 1020, 92, 3.1),
   ],
   quarantine: [],
+  nursery: [],
 };
 
 export const tanks = {
@@ -196,5 +197,11 @@ export const tanks = {
     name: "Mala izolacni nadrz",
     plantTrouble: null,
     waterQuality: 0.9,
+  },
+  nursery: {
+    label: "Odchovna",
+    name: "Ticha odchovna",
+    plantTrouble: null,
+    waterQuality: 0.94,
   },
 };

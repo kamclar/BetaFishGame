@@ -12,15 +12,19 @@ for (const [key, file] of Object.entries(decorFiles)) {
 }
 const bottomImage = new Image();
 bottomImage.src = "./assets/decor/aquarium_bottom.png";
+const quarantineBottomImage = new Image();
+quarantineBottomImage.src = "./assets/decor/quarantine_bottom.png";
+const nurseryBottomImage = new Image();
+nurseryBottomImage.src = "./assets/decor/nursery_bottom.png";
 
-export function drawAquarium(ctx, view, plants) {
+export function drawAquarium(ctx, view, plants, tankId = "main") {
   const glass = getGlassBounds(view);
   const surfaceY = getSurfaceY(view);
   ctx.save();
   ctx.beginPath();
   ctx.rect(glass.left, surfaceY - 4, glass.width, view.height - surfaceY - 16);
   ctx.clip();
-  drawWater(ctx, view);
+  drawWater(ctx, view, tankId);
   drawPlants(ctx, view, plants);
   drawBubbles(ctx, view);
   ctx.restore();
@@ -103,13 +107,16 @@ export function getGlassBounds(view) {
 }
 
 
-function drawWater(ctx, view) {
+function drawWater(ctx, view, tankId) {
   const surfaceY = getSurfaceY(view);
   const glass = getGlassBounds(view);
   const gradient = ctx.createLinearGradient(0, surfaceY, 0, view.height);
-  gradient.addColorStop(0, "rgba(79, 206, 225, 0.62)");
-  gradient.addColorStop(0.55, "rgba(20, 152, 188, 0.58)");
-  gradient.addColorStop(1, "rgba(8, 88, 126, 0.68)");
+  const water = tankId === "quarantine"
+    ? ["rgba(105, 202, 220, 0.58)", "rgba(42, 126, 158, 0.56)", "rgba(20, 66, 96, 0.7)"]
+    : tankId === "nursery"
+      ? ["rgba(126, 216, 205, 0.56)", "rgba(46, 157, 151, 0.54)", "rgba(18, 92, 101, 0.68)"]
+      : ["rgba(79, 206, 225, 0.62)", "rgba(20, 152, 188, 0.58)", "rgba(8, 88, 126, 0.68)"];
+  gradient.addColorStop(0, water[0]); gradient.addColorStop(0.55, water[1]); gradient.addColorStop(1, water[2]);
   ctx.fillStyle = gradient;
   ctx.fillRect(glass.left, surfaceY, glass.width, view.height - surfaceY - glass.bottomInset);
 
@@ -123,16 +130,17 @@ function drawWater(ctx, view) {
   }
   ctx.stroke();
 
-  drawBottomDecor(ctx, view);
+  drawBottomDecor(ctx, view, tankId);
 }
 
-function drawBottomDecor(ctx, view) {
+function drawBottomDecor(ctx, view, tankId) {
   const gl = getGlassBounds(view);
   const bottom = view.height - 44;
 
-  if (bottomImage.complete && bottomImage.naturalWidth > 0) {
+  const selectedBottom = tankId === "quarantine" ? quarantineBottomImage : tankId === "nursery" ? nurseryBottomImage : bottomImage;
+  if (selectedBottom.complete && selectedBottom.naturalWidth > 0) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bottomImage, gl.left, view.height - 150, gl.width, 150);
+    ctx.drawImage(selectedBottom, gl.left, view.height - 150, gl.width, 150);
     return;
   }
 

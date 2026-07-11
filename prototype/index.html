@@ -30,6 +30,7 @@
             <div class="tank-tabs" aria-label="Prepinani nadrzi">
               <button class="tank-tab active" type="button" data-tank="main">Hlavni</button>
               <button class="tank-tab" type="button" data-tank="quarantine">Karantena</button>
+              <button class="tank-tab" type="button" data-tank="nursery">Odchovna</button>
             </div>
             <div class="water-stats" aria-label="Hodnoty vody">
               <span id="gameDay">Den 1</span>
@@ -100,6 +101,9 @@
               <dt>Rarita</dt>
               <dd id="fishRarity">-</dd>
             </div>
+            <div><dt>Pohlavi</dt><dd id="fishSex">-</dd></div>
+            <div><dt>Rodice</dt><dd id="fishParents">-</dd></div>
+            <div><dt>Potomci</dt><dd id="fishOffspring">-</dd></div>
           </dl>
 
           <div class="trait-list" id="traitList"></div>
@@ -108,6 +112,7 @@
           <div class="fish-actions">
             <button type="button" id="moveFishButton">Presunout do karanteny</button>
             <button type="button" id="treatFishButton">Pouzit lek</button>
+            <button type="button" id="breedFishButton">Najit partnera</button>
           </div>
 
           <div class="fish-history">

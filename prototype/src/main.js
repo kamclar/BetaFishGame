@@ -12,6 +12,7 @@ import { actionCosts, canAfford, economy, initializeEconomy, payForAction, recor
 import { loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
 import { breedPair, findMate, initializeBreeding } from "./systems/breedingSystem.js";
+import { prepareForSale, runSalesDay } from "./systems/salesSystem.js";
 import {
   exposeTankToTrouble,
   getActiveSymptoms,
@@ -40,6 +41,8 @@ let heldItem = null;
 let pointer = { x: -100, y: -100 };
 const foodParticles = [];
 const liquidClouds = [];
+const debugMode = new URLSearchParams(location.search).has("debugTime");
+document.body.classList.toggle("debug-mode", debugMode);
 
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -212,6 +215,27 @@ function breedSelectedFish() {
   renderFishCard(ui, selectedFish);
 }
 
+function sellSelectedFish() {
+  if (!selectedFish || !prepareForSale(selectedFish)) return;
+  addJournalEntry(ui, `${selectedFish.name}: pripravena na prodej za ${selectedFish.salePrice} penez.`);
+  currentTank = "sale";
+  updateTankTabs(ui, tanks, currentTank);
+  renderFishCard(ui, selectedFish);
+}
+
+function startSalesDay() {
+  const result = runSalesDay(fish);
+  if (!result.sold.length && !result.unsold.length) {
+    addJournalEntry(ui, "Prodejni nadrz je prazdna.");
+    return;
+  }
+  economy.coins += result.income;
+  const soldNames = result.sold.map(({ item }) => item.name).join(", ") || "zadne";
+  addJournalEntry(ui, `Prodejni den: prodano ${soldNames}. Prijem ${result.income} penez. Neprodano ${result.unsold.length}.`);
+  selectedFish = null;
+  clearFishCard(ui);
+}
+
 canvas.addEventListener("click", (event) => {
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -248,6 +272,11 @@ window.addEventListener("keydown", (event) => {
   button.addEventListener("click", () => {
     if (button.dataset.action === "journal") {
       openJournal();
+    } else if (button.dataset.action === "debug-money" && debugMode) {
+      economy.coins += 100;
+      addJournalEntry(ui, "Debug: pridano 100 penez.");
+    } else if (button.dataset.action === "sales") {
+      startSalesDay();
     } else if (button.dataset.action === "clean") {
       if (!spendForAction("clean")) return;
       cleanTank(tanks[currentTank]);
@@ -266,6 +295,7 @@ document.getElementById("fishCardCloseButton").addEventListener("click", deselec
 ui.moveFishButton.addEventListener("click", moveSelectedFish);
 ui.treatFishButton.addEventListener("click", treatSelectedFish);
 ui.breedFishButton.addEventListener("click", breedSelectedFish);
+ui.sellFishButton.addEventListener("click", sellSelectedFish);
 
 for (const tab of ui.tankTabs) {
   tab.addEventListener("click", () => switchTank(tab.dataset.tank));
@@ -382,9 +412,11 @@ function restoreSavedGame() {
   restoreArray(plants.main, saved.plants?.main);
   restoreArray(plants.quarantine, saved.plants?.quarantine);
   restoreArray(plants.nursery, saved.plants?.nursery);
+  restoreArray(plants.sale, saved.plants?.sale);
   restoreObject(tanks.main, saved.tanks?.main);
   restoreObject(tanks.quarantine, saved.tanks?.quarantine);
   restoreObject(tanks.nursery, saved.tanks?.nursery);
+  restoreObject(tanks.sale, saved.tanks?.sale);
   restoreObject(economy, saved.economy);
   if (saved.gameClock) {
     gameClock.day = saved.gameClock.day ?? gameClock.day;

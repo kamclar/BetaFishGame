@@ -137,7 +137,7 @@ function drawBottomDecor(ctx, view, tankId) {
   const gl = getGlassBounds(view);
   const bottom = view.height - 44;
 
-  const selectedBottom = tankId === "quarantine" ? quarantineBottomImage : tankId === "nursery" ? nurseryBottomImage : bottomImage;
+  const selectedBottom = tankId === "quarantine" || tankId === "sale" ? quarantineBottomImage : tankId === "nursery" ? nurseryBottomImage : bottomImage;
   if (selectedBottom.complete && selectedBottom.naturalWidth > 0) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(selectedBottom, gl.left, view.height - 150, gl.width, 150);

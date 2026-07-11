@@ -833,3 +833,143 @@ dd {
 .book::before {
   display: none;
 }
+
+.sales {
+  background-image: radial-gradient(circle at 50% 55%, #d4b45f 0 18%, #8a5b28 19% 38%, transparent 39%), linear-gradient(135deg, transparent 30%, #8a5b28 31% 68%, transparent 69%);
+}
+
+.debug-only { display: none !important; }
+.debug-mode .debug-only { display: flex !important; }
+.debug-money-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 3px solid #65491e;
+  background: #d4b45f;
+  color: #24170b;
+  font: 900 25px/1 Georgia, serif;
+  box-shadow: inset 0 0 0 3px #f0d986;
+}
+
+/* Unified pixel-art HUD */
+.desktop-tank-mode .top-bar {
+  top: 34px;
+  left: 14px;
+  right: 14px;
+  padding: 8px 10px;
+  opacity: 1;
+  pointer-events: auto;
+  border: 3px solid #17262b;
+  border-bottom-color: #081014;
+  border-radius: 0;
+  background: rgba(8, 17, 21, 0.9);
+  box-shadow: inset 0 0 0 2px #31505a, 4px 4px 0 rgba(0, 0, 0, 0.4);
+}
+
+body:hover .desktop-tank-mode .top-bar { opacity: 1; }
+
+.desktop-tank-mode .top-bar h1 {
+  color: #f2e2b4;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+  text-shadow: 2px 2px 0 #10191c;
+}
+
+.desktop-tank-mode .top-bar .eyebrow {
+  color: #78c7bd;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.desktop-tank-mode .tank-tabs,
+.desktop-tank-mode .water-stats {
+  border: 2px solid #29434b;
+  border-radius: 0;
+  background: #0b171b;
+  padding: 3px;
+}
+
+.desktop-tank-mode .tank-tab {
+  min-width: 72px;
+  min-height: 27px;
+  border: 0;
+  border-right: 2px solid #263c43;
+  border-radius: 0;
+  background: #122329;
+  color: #91a9a7;
+  font-size: 11px;
+}
+
+.desktop-tank-mode .tank-tab.active {
+  background: #39565a;
+  color: #fff0bd;
+  box-shadow: inset 0 -3px 0 #d4b45f;
+}
+
+.desktop-tank-mode .water-stats span {
+  min-width: auto;
+  padding: 4px 7px;
+  border: 0;
+  border-right: 1px solid #29434b;
+  border-radius: 0;
+  background: transparent;
+  color: #b8ceca;
+  font-size: 11px;
+}
+
+.desktop-tank-mode .side-panel {
+  top: 112px;
+  width: 292px;
+  max-height: calc(100vh - 206px);
+}
+
+.desktop-tank-mode .fish-card {
+  border-left: 16px solid #372415;
+  outline: 3px solid #16100b;
+  background-color: #eadcb9;
+  background-image: linear-gradient(90deg, rgba(113,73,35,.08) 1px, transparent 1px), linear-gradient(rgba(113,73,35,.08) 1px, transparent 1px);
+  background-size: 8px 8px;
+  box-shadow: 6px 6px 0 rgba(0,0,0,.55);
+}
+
+.desktop-tank-mode .fish-data {
+  grid-template-columns: 1fr 1fr;
+  gap: 0 8px;
+}
+
+.desktop-tank-mode .fish-actions {
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.desktop-tank-mode .fish-actions button {
+  border: 2px solid #77552f;
+  border-bottom-width: 4px;
+  background: #d8c08e;
+  font-weight: 700;
+}
+
+.desktop-tank-mode .shelf {
+  align-items: center;
+  gap: 7px;
+  height: 86px;
+  padding: 8px 14px 10px;
+  overflow-x: auto;
+}
+
+.desktop-tank-mode .shelf-item {
+  min-width: 112px;
+  min-height: 60px;
+  padding: 5px 8px;
+  color: #e6d5aa;
+  font-size: 11px;
+}
+
+.desktop-tank-mode .shelf-item:hover,
+.desktop-tank-mode .shelf-item.selected {
+  transform: translateY(-2px);
+  background: #382719;
+  box-shadow: inset 0 0 0 2px #b88748, 0 4px 0 #090604;
+}

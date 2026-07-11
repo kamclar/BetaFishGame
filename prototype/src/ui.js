@@ -22,6 +22,7 @@ export function createUi() {
     moveFishButton: document.getElementById("moveFishButton"),
     treatFishButton: document.getElementById("treatFishButton"),
     breedFishButton: document.getElementById("breedFishButton"),
+    sellFishButton: document.getElementById("sellFishButton"),
     tankTabs: [...document.querySelectorAll(".tank-tab")],
     appShell: document.querySelector(".app-shell"),
     heldCursor: document.getElementById("heldCursor"),
@@ -136,6 +137,7 @@ function updateFishActionButtons(ui, item) {
   ui.moveFishButton.disabled = !hasFish;
   ui.treatFishButton.disabled = !hasFish || (item.symptoms.length === 0 && item.diseases.length === 0);
   ui.breedFishButton.disabled = !hasFish || !item.canBreed;
+  ui.sellFishButton.disabled = !hasFish || item.lifeStage === "fry" || item.diseases.length > 0 || item.tank === "sale";
   if (!hasFish) {
     ui.moveFishButton.textContent = "Presunout do karanteny";
     return;

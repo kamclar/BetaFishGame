@@ -4,7 +4,8 @@ const electronPath = require("electron");
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 
-const child = spawn(electronPath, ["."], {
+const extraArgs = process.argv.includes("--debug-time") ? ["--debug-time"] : [];
+const child = spawn(electronPath, [".", ...extraArgs], {
   cwd: process.cwd(),
   env,
   stdio: "inherit",

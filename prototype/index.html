@@ -31,6 +31,7 @@
               <button class="tank-tab active" type="button" data-tank="main">Hlavni</button>
               <button class="tank-tab" type="button" data-tank="quarantine">Karantena</button>
               <button class="tank-tab" type="button" data-tank="nursery">Odchovna</button>
+              <button class="tank-tab" type="button" data-tank="sale">Prodej</button>
             </div>
             <div class="water-stats" aria-label="Hodnoty vody">
               <span id="gameDay">Den 1</span>
@@ -69,6 +70,12 @@
           <button class="shelf-item" type="button" data-action="journal" title="Otevrit denicek">
             <span class="jar book"></span>
             <span>Denicek</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="sales" title="Spustit prodejni den">
+            <span class="jar sales"></span><span>Prodejni den</span>
+          </button>
+          <button class="shelf-item debug-only" type="button" data-action="debug-money" title="Pridat testovaci penize">
+            <span class="debug-money-icon">+</span><span>+100 penez</span>
           </button>
         </div>
       </section>
@@ -113,6 +120,7 @@
             <button type="button" id="moveFishButton">Presunout do karanteny</button>
             <button type="button" id="treatFishButton">Pouzit lek</button>
             <button type="button" id="breedFishButton">Najit partnera</button>
+            <button type="button" id="sellFishButton">Pripravit k prodeji</button>
           </div>
 
           <div class="fish-history">

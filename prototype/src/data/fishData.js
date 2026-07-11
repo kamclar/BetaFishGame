@@ -183,6 +183,7 @@ export const plants = {
   ],
   quarantine: [],
   nursery: [],
+  sale: [],
 };
 
 export const tanks = {
@@ -203,5 +204,11 @@ export const tanks = {
     name: "Ticha odchovna",
     plantTrouble: null,
     waterQuality: 0.94,
+  },
+  sale: {
+    label: "Prodejni mistnost",
+    name: "Prodejni nadrz",
+    plantTrouble: null,
+    waterQuality: 0.9,
   },
 };

@@ -22,7 +22,8 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, "..", "prototype", "index.html"));
+  const query = process.argv.includes("--debug-time") ? { debugTime: "1" } : undefined;
+  mainWindow.loadFile(path.join(__dirname, "..", "prototype", "index.html"), { query });
 }
 
 app.whenReady().then(() => {

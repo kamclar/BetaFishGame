@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beta Fish Game - prototyp</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="desktop-titlebar">
+      <div class="drag-region">
+        <span class="title-dot"></span>
+        <span>Beta Fish Game</span>
+      </div>
+      <div class="window-buttons">
+        <button type="button" data-window-action="pin" title="Pripnout nahore">Pin</button>
+        <button type="button" data-window-action="minimize" title="Minimalizovat">_</button>
+        <button type="button" data-window-action="close" title="Zavrit">X</button>
+      </div>
+    </header>
+    <div id="heldCursor" class="held-cursor" aria-hidden="true"></div>
+    <main class="app-shell desktop-tank-mode">
+      <section class="aquarium-panel" aria-label="Akvarium">
+        <div class="top-bar">
+          <div>
+            <p class="eyebrow" id="tankLabel">Domaci nadrz</p>
+            <h1 id="tankName">Tiche akvarium</h1>
+          </div>
+          <div class="top-controls">
+            <div class="tank-tabs" aria-label="Prepinani nadrzi">
+              <button class="tank-tab active" type="button" data-tank="main">Hlavni</button>
+              <button class="tank-tab" type="button" data-tank="quarantine">Karantena</button>
+            </div>
+            <div class="water-stats" aria-label="Hodnoty vody">
+              <span id="gameDay">Den 1</span>
+              <span id="gameTime">08:00</span>
+              <span id="waterQuality">Voda: dobra</span>
+              <span id="coinCount">36 penez</span>
+              <span id="currentTask">Nakrm ryby 0/2</span>
+            </div>
+          </div>
+        </div>
+
+        <canvas id="aquarium" width="1120" height="620" aria-label="Plovouci ryby"></canvas>
+        <div class="drag-handle" title="Táhnout okno"></div>
+
+        <div class="shelf" aria-label="Police s predmety">
+          <button class="shelf-item" type="button" data-action="feed" title="Nakrm ryby">
+            <span class="jar flakes"></span>
+            <span>Vlocky</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="test" title="Zmer vodu">
+            <span class="jar test"></span>
+            <span>Test pH</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="plant" title="Pridat rostlinu">
+            <span class="jar plant"></span>
+            <span>Rostlina</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="medicine" title="Pouzit lek na vybranou rybu">
+            <span class="jar medicine"></span>
+            <span>Lek</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="clean" title="Odcistit dno a vymenit cast vody">
+            <span class="jar clean"></span>
+            <span>Uklid</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="journal" title="Otevrit denicek">
+            <span class="jar book"></span>
+            <span>Denicek</span>
+          </button>
+        </div>
+      </section>
+
+      <aside class="side-panel" aria-label="Detail ryby">
+        <div class="card fish-card">
+          <button type="button" id="fishCardCloseButton" class="journal-close">×</button>
+          <p class="eyebrow">Karta ryby</p>
+          <h2 id="fishName">Vyber rybu</h2>
+          <p id="fishSpecies" class="muted">Klikni na rybu v akvariu.</p>
+
+          <dl class="fish-data">
+            <div>
+              <dt>Pozorovani</dt>
+              <dd id="fishHealth">-</dd>
+            </div>
+            <div>
+              <dt>Nalada</dt>
+              <dd id="fishStress">-</dd>
+            </div>
+            <div>
+              <dt>Hlad</dt>
+              <dd id="fishHunger">-</dd>
+            </div>
+            <div>
+              <dt>Vek</dt>
+              <dd id="fishAge">-</dd>
+            </div>
+            <div>
+              <dt>Rarita</dt>
+              <dd id="fishRarity">-</dd>
+            </div>
+          </dl>
+
+          <div class="trait-list" id="traitList"></div>
+          <div class="symptom-list" id="symptomList"></div>
+
+          <div class="fish-actions">
+            <button type="button" id="moveFishButton">Presunout do karanteny</button>
+            <button type="button" id="treatFishButton">Pouzit lek</button>
+          </div>
+
+          <div class="fish-history">
+            <p class="eyebrow">Historie ryby</p>
+            <ul id="fishHistory"></ul>
+          </div>
+        </div>
+      </aside>
+
+      <section class="card journal-panel" aria-label="Denicek">
+        <button type="button" id="journalCloseButton" class="journal-close">×</button>
+        <p class="eyebrow">Denicek</p>
+        <ul id="journalLog"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

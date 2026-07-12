@@ -1,4 +1,5 @@
 import { plantTypes } from "../data/plantData.js";
+import { snailPosition } from "../systems/tankSystem.js";
 
 const decorFiles = {
   vallisneria: "plant_vallisneria.png",
@@ -16,8 +17,14 @@ const quarantineBottomImage = new Image();
 quarantineBottomImage.src = "./assets/decor/quarantine_bottom.png";
 const nurseryBottomImage = new Image();
 nurseryBottomImage.src = "./assets/decor/nursery_bottom.png";
+const snailImage = new Image();
+snailImage.src = "./assets/creatures/ampullaria.png";
+const customerImages = Array.from({ length: 4 }, (_, index) => {
+  const image = new Image(); image.src = `./assets/customers/customer_${index}_eye_mask.png`; return image;
+});
 
-export function drawAquarium(ctx, view, plants, tankId = "main") {
+export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
+  if (tankId === "sale") drawCustomers(ctx, view, tank);
   const glass = getGlassBounds(view);
   const surfaceY = getSurfaceY(view);
   ctx.save();
@@ -26,8 +33,192 @@ export function drawAquarium(ctx, view, plants, tankId = "main") {
   ctx.clip();
   drawWater(ctx, view, tankId);
   drawPlants(ctx, view, plants);
+  if (tankId === "nursery" && tank?.spawning?.eggs) drawEggClutch(ctx, view, tank.spawning.eggs);
+  drawTankDirt(ctx, view, tank);
+  drawSnails(ctx, view, tank);
   drawBubbles(ctx, view);
   ctx.restore();
+}
+
+function drawCustomers(ctx, view, tank) {
+  const visitors = tank?.sales?.visitors ?? [];
+  for (const visitor of visitors) {
+    const image = customerImages[visitor.type];
+    if (!image?.complete || image.naturalWidth === 0) continue;
+    const x = visitor.x * view.width;
+    const width = 320;
+    const height = 400;
+    const bottom = view.height + 68;
+    const top = bottom - height;
+    ctx.save();
+    ctx.globalAlpha = visitor.state === "leaving" ? 0.64 : 0.78;
+    ctx.imageSmoothingEnabled = false;
+    drawCustomerEyes(ctx, visitor, x, top, width, height);
+    ctx.drawImage(image, x - width / 2, top, width, height);
+    ctx.restore();
+  }
+}
+
+function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
+  if (!Number.isFinite(visitor.lookX) || !Number.isFinite(visitor.lookY)) return;
+  const eyePixels = [
+    [[52.5, 69], [74.5, 69]],
+    [[50.5, 48], [76.5, 48]],
+    [[52, 54], [76, 54]],
+    [[51.5, 58], [74.5, 58]],
+  ];
+  const scaleX = width / 128;
+  const scaleY = height / 160;
+  const eyes = eyePixels[visitor.type].map(([x, y]) => ({ x: centerX - width / 2 + x * scaleX, y: top + y * scaleY }));
+  const baseY = (eyes[0].y + eyes[1].y) / 2;
+  const targetDx = visitor.lookX - centerX;
+  const targetDy = visitor.lookY - baseY;
+  const length = Math.max(1, Math.hypot(targetDx, targetDy));
+  const offsetX = targetDx / length * 2.2;
+  const offsetY = targetDy / length * 1.5;
+  ctx.fillStyle = "#eee3cf";
+  for (const eye of eyes) ctx.fillRect(Math.round(eye.x - 7), Math.round(eye.y - 5), 14, 10);
+  ctx.fillStyle = "#171311";
+  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 2), Math.round(eye.y + offsetY - 2), 5, 5);
+  ctx.fillStyle = "#e8dfc9";
+  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 1), Math.round(eye.y + offsetY - 1), 1, 1);
+}
+
+export function drawSaleEffects(ctx, tank) {
+  const effects = tank?.sales?.effects ?? [];
+  for (const effect of effects) {
+    const progress = 1 - effect.timer / 3.2;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, effect.timer / 3.2);
+    for (let i = 0; i < 10; i += 1) {
+      const angle = i / 10 * Math.PI * 2 + progress * 1.4;
+      const radius = 18 + progress * 34;
+      const x = effect.x + Math.cos(angle) * radius;
+      const y = effect.y + Math.sin(angle) * radius - progress * 12;
+      ctx.fillStyle = i % 2 ? "#f4dc82" : "#d49b42";
+      ctx.fillRect(Math.round(x), Math.round(y), 4, 4);
+    }
+    ctx.fillStyle = "#fff0b0";
+    ctx.font = "bold 13px Consolas";
+    ctx.textAlign = "center";
+    ctx.fillText(`+${effect.price} penez`, effect.x, effect.y - 34 - progress * 16);
+    ctx.restore();
+  }
+}
+
+function drawTankDirt(ctx, view, tank) {
+  if (!tank) return;
+  const glass = getGlassBounds(view);
+  const bottom = view.height - 22;
+  const debris = tank.debris ?? 0;
+  const brown = tank.brownWater ?? 0;
+  const algae = tank.algae ?? 0;
+
+
+  if (brown > 0.02) {
+    const gradient = ctx.createLinearGradient(0, bottom - 145, 0, bottom);
+    gradient.addColorStop(0, "rgba(105, 65, 30, 0)");
+    gradient.addColorStop(1, `rgba(105, 65, 30, ${Math.min(0.42, brown * 0.5)})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(glass.left, bottom - 145, glass.width, 145);
+  }
+
+  const debrisCount = Math.floor(debris * 95);
+  if (Array.isArray(tank.debrisMap)) {
+    const cellWidth = glass.width / tank.debrisMap.length;
+    tank.debrisMap.forEach((level, index) => {
+      const x = glass.left + index * cellWidth;
+      const ridge = ((index * 13) % 7) - 3;
+      const height = Math.max(0, Math.floor(level * 42) + ridge);
+      if (height <= 0) return;
+      ctx.fillStyle = x % 4 ? "rgba(69, 48, 27, 0.9)" : "rgba(91, 61, 31, 0.9)";
+      ctx.fillRect(x, bottom - height, Math.ceil(cellWidth + 1), height);
+      ctx.fillStyle = "rgba(121, 82, 40, 0.8)";
+      ctx.fillRect(x, bottom - height, Math.ceil(cellWidth), 2);
+    });
+  }
+  for (let i = 0; i < debrisCount; i += 1) {
+    const x = glass.left + 14 + ((i * 79) % Math.max(20, glass.width - 28));
+    const y = bottom - 8 - ((i * 17) % 26);
+    ctx.fillStyle = i % 4 === 0 ? "#75502d" : i % 3 === 0 ? "#49351f" : "#2d291b";
+    ctx.fillRect(Math.round(x), Math.round(y), 2 + (i % 3), 2);
+  }
+
+  const patches = Math.floor(algae * 30);
+  ctx.globalAlpha = Math.min(0.72, 0.22 + algae * 0.6);
+  for (let i = 0; i < patches; i += 1) {
+    const sideX = i % 2 ? glass.right - 8 - (i % 3) * 3 : glass.left + 5 + (i % 3) * 3;
+    const y = getSurfaceY(view) + 35 + ((i * 53) % Math.max(30, view.height - getSurfaceY(view) - 105));
+    ctx.fillStyle = i % 3 ? "#426b38" : "#6d8338";
+    ctx.fillRect(Math.round(sideX), Math.round(y), 5 + (i % 4), 7 + (i % 5));
+  }
+  ctx.globalAlpha = 1;
+}
+
+export function drawGlassAlgae(ctx, view, tank) {
+  const algae = tank?.algae ?? 0;
+  if (algae <= 0.04) return;
+  const glass = getGlassBounds(view);
+  const map = tank.algaeMap;
+  if (Array.isArray(map) && map.length === 32 * 18) {
+    const top = getSurfaceY(view) + 5;
+    const width = glass.width - 10;
+    const height = view.height - getSurfaceY(view) - 30;
+    const mask = document.createElement("canvas");
+    mask.width = 32; mask.height = 18;
+    const maskCtx = mask.getContext("2d");
+    map.forEach((level, index) => {
+      if (level < 0.025) return;
+      const column = index % 32, row = Math.floor(index / 32);
+      maskCtx.fillStyle = `rgba(54, 113, 45, ${Math.min(0.58, Math.pow(level, 1.18) * 0.62)})`;
+      maskCtx.fillRect(column, row, 1, 1);
+    });
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(mask, glass.left + 5, top, width, height);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSnails(ctx, view, tank) {
+  const count = tank?.snails ?? 0;
+  if (!count) return;
+  const glass = getGlassBounds(view);
+  const waterHeight = view.height - getSurfaceY(view) - 100;
+  for (let i = 0; i < count; i += 1) {
+    const now = Date.now();
+    const position = snailPosition(i, now);
+    const previous = snailPosition(i, now - 1200);
+    const x = glass.left + 22 + position.x * (glass.width - 44);
+    const y = getSurfaceY(view) + 40 + position.y * waterHeight;
+    if (snailImage.complete && snailImage.naturalWidth > 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      const dx = position.x - previous.x;
+      const dy = position.y - previous.y;
+      ctx.rotate(Math.atan2(dy, dx) - Math.PI);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(snailImage, -20, -20, 40, 40);
+      ctx.restore();
+    }
+  }
+}
+
+function drawEggClutch(ctx, view, eggs) {
+  const baseX = view.width * 0.48;
+  const baseY = view.height - 78;
+  ctx.fillStyle = "#d9e6c4";
+  for (let i = 0; i < Math.max(8, eggs.count * 5); i += 1) {
+    const x = baseX + ((i * 17) % 64) - 32;
+    const y = baseY + ((i * 11) % 25) - 12;
+    ctx.fillStyle = "#708676";
+    ctx.fillRect(Math.round(x - 1), Math.round(y - 1), 9, 9);
+    ctx.fillStyle = i % 3 === 0 ? "#7d947e" : "#d9e6c4";
+    ctx.fillRect(Math.round(x), Math.round(y), 7, 7);
+    ctx.fillStyle = "#eef3d4";
+    ctx.fillRect(Math.round(x + 1), Math.round(y + 1), 2, 2);
+  }
 }
 
 export function drawFood(ctx, view, foodPulse) {

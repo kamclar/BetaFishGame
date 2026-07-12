@@ -14,6 +14,7 @@
       </div>
       <div class="window-buttons">
         <button type="button" data-window-action="pin" title="Pripnout nahore">Pin</button>
+        <button type="button" data-window-action="restart" title="Smazat ulozeni a zacit novou hru">Nova hra</button>
         <button type="button" data-window-action="minimize" title="Minimalizovat">_</button>
         <button type="button" data-window-action="close" title="Zavrit">X</button>
       </div>
@@ -30,7 +31,7 @@
             <div class="tank-tabs" aria-label="Prepinani nadrzi">
               <button class="tank-tab active" type="button" data-tank="main">Hlavni</button>
               <button class="tank-tab" type="button" data-tank="quarantine">Karantena</button>
-              <button class="tank-tab" type="button" data-tank="nursery">Odchovna</button>
+              <button class="tank-tab" type="button" data-tank="nursery">Treci nadrz</button>
               <button class="tank-tab" type="button" data-tank="sale">Prodej</button>
             </div>
             <div class="water-stats" aria-label="Hodnoty vody">
@@ -67,6 +68,12 @@
             <span class="jar clean"></span>
             <span>Uklid</span>
           </button>
+          <button class="shelf-item" type="button" data-action="scrape" title="Seskrabat rasy ze skla">
+            <span class="scraper-icon"></span><span>Skrabka</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="shop" title="Otevrit obchod">
+            <span class="snail-icon">$</span><span>Obchod</span>
+          </button>
           <button class="shelf-item" type="button" data-action="journal" title="Otevrit denicek">
             <span class="jar book"></span>
             <span>Denicek</span>
@@ -76,6 +83,9 @@
           </button>
           <button class="shelf-item debug-only" type="button" data-action="debug-money" title="Pridat testovaci penize">
             <span class="debug-money-icon">+</span><span>+100 penez</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="restart-game" title="Smazat ulozeni a zacit znovu">
+            <span class="restart-icon">↻</span><span>Nova hra</span>
           </button>
         </div>
       </section>
@@ -119,7 +129,7 @@
           <div class="fish-actions">
             <button type="button" id="moveFishButton">Presunout do karanteny</button>
             <button type="button" id="treatFishButton">Pouzit lek</button>
-            <button type="button" id="breedFishButton">Najit partnera</button>
+            <button type="button" id="breedFishButton">Presunout do treni</button>
             <button type="button" id="sellFishButton">Pripravit k prodeji</button>
           </div>
 
@@ -133,7 +143,25 @@
       <section class="card journal-panel" aria-label="Denicek">
         <button type="button" id="journalCloseButton" class="journal-close">×</button>
         <p class="eyebrow">Denicek</p>
+        <div class="journal-summary"><span id="journalCount">0 zaznamu</span><span class="important-key">◆ dulezite</span></div>
         <ul id="journalLog"></ul>
+      </section>
+      <section class="shop-panel" aria-label="Obchod">
+        <button type="button" id="shopCloseButton" class="journal-close">Ã—</button>
+        <p class="eyebrow">Akvaristicky obchod</p>
+        <div class="shop-balance" id="shopBalance">0 penez</div>
+        <div class="shop-grid">
+          <button type="button" id="buySnailButton" class="shop-product">
+            <span class="shop-product-icon snail-icon">@</span>
+            <span><strong>Ampularie</strong><small>Pomalu spasa rasy ze skla.</small></span>
+            <b>45 penez</b>
+          </button>
+          <button type="button" id="buyEggsButton" class="shop-product">
+            <span class="shop-product-icon egg-icon">••</span>
+            <span><strong>Jikry nezname linie</strong><small>Vlozi se do treci nadrze. Vylihne se 1–2 rybky.</small></span>
+            <b>28 penez</b>
+          </button>
+        </div>
       </section>
     </main>
 

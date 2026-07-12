@@ -1,8 +1,18 @@
 import { diseaseDatabase, symptomDatabase } from "./systems/healthSystem.js";
 import { describeHealth, describeStress, getActiveSymptoms, getDiseaseStage } from "./systems/healthSystem.js";
 
+const traitInfo = {
+  klidna: ["Klidna", "Pomaleji se stresuje."], skvrnita: ["Skvrnita", "Vyrazny dedicny vzor."],
+  nocni: ["Nocni", "Aktivnejsi za sera."], stihla: ["Stihla", "Rychla telesna stavba."],
+  hlubinna: ["Hlubinna", "Vyhledava spodni cast nadrze."], necitelna: ["Necitelna", "Jeji stav se hur odhaduje."],
+  elektricka: ["Elektricka", "Nese svetelny znak."], ostra: ["Ostra", "Vyrazne obranne ploutve."],
+  plodna: ["Plodna", "Vyssi chovna hodnota."], robustni: ["Robustni", "Lepe zvlada nemoci."],
+  jeskynni: ["Jeskynni", "Adaptovana na slabe svetlo."], slepa: ["Slepa", "Orientuje se jinymi smysly."],
+  echolokacni: ["Echolokacni", "V klidne nadrzi rychleji odbourava stres."],
+};
+
 export function createUi() {
-  return {
+  const ui = {
     fishName: document.getElementById("fishName"),
     fishSpecies: document.getElementById("fishSpecies"),
     fishHealth: document.getElementById("fishHealth"),
@@ -31,18 +41,57 @@ export function createUi() {
     waterQuality: document.getElementById("waterQuality"),
     coinCount: document.getElementById("coinCount"),
     currentTask: document.getElementById("currentTask"),
+    journalCount: document.getElementById("journalCount"),
   };
+  restoreJournal(ui);
+  return ui;
 }
 
-export function addLog(_ui, _text) {}
+export function addLog(ui, text) {
+  if (isImportantEvent(text)) addJournalEntry(ui, text);
+}
 
 export function addJournalEntry(ui, text) {
+  const important = isImportantEvent(text);
   const entry = document.createElement("li");
   entry.textContent = text;
+  entry.classList.toggle("important", important);
   ui.journalLog.prepend(entry);
   while (ui.journalLog.children.length > 40) {
     ui.journalLog.lastElementChild.remove();
   }
+  persistJournal(ui);
+  updateJournalCount(ui);
+}
+
+const JOURNAL_KEY = "beta-fish-game.journal.v1";
+
+function isImportantEvent(text) {
+  return /jik|vylihl|narozen|nemoc|nakaz|lec|prodej|prodano|odemc|uhyn|karanten|poter/i.test(text);
+}
+
+function persistJournal(ui) {
+  const entries = [...ui.journalLog.children].map((entry) => ({ text: entry.textContent, important: entry.classList.contains("important") }));
+  localStorage.setItem(JOURNAL_KEY, JSON.stringify(entries));
+}
+
+function restoreJournal(ui) {
+  try {
+    const entries = JSON.parse(localStorage.getItem(JOURNAL_KEY) ?? "[]");
+    for (const saved of entries.slice().reverse()) {
+      const entry = document.createElement("li");
+      entry.textContent = saved.text;
+      entry.classList.toggle("important", Boolean(saved.important));
+      ui.journalLog.prepend(entry);
+    }
+  } catch {}
+  updateJournalCount(ui);
+}
+
+function updateJournalCount(ui) {
+  if (!ui.journalCount) return;
+  const count = ui.journalLog.children.length;
+  ui.journalCount.textContent = `${count} ${count === 1 ? "zaznam" : "zaznamu"}`;
 }
 
 export function renderFishCard(ui, item) {
@@ -51,6 +100,7 @@ export function renderFishCard(ui, item) {
   ui.fishSpecies.textContent = item.species;
   ui.fishAge.textContent = item.age;
   ui.fishRarity.textContent = item.rarity;
+  ui.appShell.dataset.rarity = item.rarity.toLowerCase();
   ui.fishSex.textContent = item.sex ?? "nezname";
   ui.fishParents.textContent = item.parents?.length ? item.parents.join(", ") : "neznamí";
   ui.fishOffspring.textContent = String(item.offspring?.length ?? 0);
@@ -60,7 +110,9 @@ export function renderFishCard(ui, item) {
   for (const trait of item.traits) {
     const tag = document.createElement("span");
     tag.className = "trait";
-    tag.textContent = trait;
+    const info = traitInfo[trait] ?? [trait, "Dedicna vlastnost ryby."];
+    tag.textContent = info[0];
+    tag.title = info[1];
     ui.traitList.appendChild(tag);
   }
 
@@ -136,7 +188,8 @@ function updateFishActionButtons(ui, item) {
   const hasFish = Boolean(item);
   ui.moveFishButton.disabled = !hasFish;
   ui.treatFishButton.disabled = !hasFish || (item.symptoms.length === 0 && item.diseases.length === 0);
-  ui.breedFishButton.disabled = !hasFish || !item.canBreed;
+  ui.breedFishButton.disabled = !hasFish || item.tank === "nursery" || item.tank === "sale";
+  ui.breedFishButton.textContent = item?.tank === "nursery" ? "Ve treci nadrzi" : "Presunout do treni";
   ui.sellFishButton.disabled = !hasFish || item.lifeStage === "fry" || item.diseases.length > 0 || item.tank === "sale";
   if (!hasFish) {
     ui.moveFishButton.textContent = "Presunout do karanteny";

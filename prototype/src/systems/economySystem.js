@@ -18,6 +18,9 @@ export const actionCosts = {
   medicine: 6,
   clean: 3,
   test: 0,
+  scrape: 2,
+  snail: 45,
+  eggs: 28,
 };
 
 export function initializeEconomy() {

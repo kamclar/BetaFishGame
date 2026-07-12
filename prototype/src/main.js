@@ -1,4 +1,4 @@
-import { drawAquarium, drawFoodParticles, drawGlass, drawLiquidClouds } from "./art/aquariumArt.js";
+import { drawAquarium, drawFoodParticles, drawGlass, drawGlassAlgae, drawLiquidClouds, drawSaleEffects } from "./art/aquariumArt.js";
 import { getGlassBounds, getSurfaceY } from "./art/aquariumArt.js";
 import { drawFish } from "./art/fishArt.js";
 import { fishRenderScale } from "./art/fishArt.js";
@@ -7,12 +7,12 @@ import { fish, palette, plants, tanks } from "./data/fishData.js";
 import { createPlant, plantTypes, plantTypeOrder } from "./data/plantData.js";
 import { diseaseDatabase } from "./data/healthData.js";
 import { initializeLifecycle, updateLifecycle } from "./systems/lifecycleSystem.js";
-import { applyTankEffects, cleanTank, describeWater, formatGameTime, gameClock, updateWorld } from "./systems/tankSystem.js";
+import { applyTankEffects, describeWater, formatGameTime, gameClock, scrapeAlgae, updateWorld, vacuumTank } from "./systems/tankSystem.js";
 import { actionCosts, canAfford, economy, initializeEconomy, payForAction, recordAction, taskText } from "./systems/economySystem.js";
-import { loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
+import { clearSavedGame, loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
-import { breedPair, findMate, initializeBreeding } from "./systems/breedingSystem.js";
-import { prepareForSale, runSalesDay } from "./systems/salesSystem.js";
+import { addMysteryEggs, initializeBreeding, updateSpawning } from "./systems/breedingSystem.js";
+import { prepareForSale, startLiveSales, updateLiveSales } from "./systems/salesSystem.js";
 import {
   exposeTankToTrouble,
   getActiveSymptoms,
@@ -32,6 +32,7 @@ initializeEconomy();
 restoreSavedGame();
 for (const item of fish) initializeLifecycle(item);
 initializeBreeding(fish);
+for (const item of fish) item.traits = item.traits.map((trait) => trait === "ticha" ? "echolokacni" : trait);
 
 let selectedFish = null;
 let lastTime = performance.now();
@@ -39,6 +40,12 @@ let currentTank = "main";
 let nextPlantX = 220;
 let heldItem = null;
 let pointer = { x: -100, y: -100 };
+let toolAngle = 0;
+let toolTargetAngle = 0;
+let toolOverGlass = false;
+let resettingGame = false;
+let maintenanceDragging = false;
+let siphonLoad = 0;
 const foodParticles = [];
 const liquidClouds = [];
 const debugMode = new URLSearchParams(location.search).has("debugTime");
@@ -75,6 +82,24 @@ function update(delta) {
   updateLiquidClouds(delta);
   updateWorld(delta, tanks, plants, fish, (day) => {
     addJournalEntry(ui, t("event.day_started", { day }));
+  });
+  updateSpawning(
+    delta,
+    tanks.nursery,
+    fish,
+    (parents) => addJournalEntry(ui, `${parents[0].name} a ${parents[1].name}: ve treci nadrzi se objevily jikry.`),
+    (babies, parents) => {
+      babies.forEach(initializeLifecycle);
+      const names = babies.map((baby) => baby.name).join(" a ");
+      const message = parents.length === 2
+        ? `Z jiker ryb ${parents[0].name} a ${parents[1].name} se vylihl poter: ${names}.`
+        : `Ze zakoupenych jiker se vylihl poter: ${names}.`;
+      addJournalEntry(ui, message);
+    }
+  );
+  updateLiveSales(delta, tanks.sale, fish, economy, (item, price) => {
+    addJournalEntry(ui, `Zakaznik koupil rybu ${item.name} za ${price} penez.`);
+    if (selectedFish?.id === item.id) { selectedFish = null; clearFishCard(ui); }
   });
 
   for (const item of fish) {
@@ -118,7 +143,7 @@ function update(delta) {
 function draw() {
   const view = getView();
   ctx.clearRect(0, 0, view.width, view.height);
-  drawAquarium(ctx, view, plants[currentTank], currentTank);
+  drawAquarium(ctx, view, plants[currentTank], currentTank, tanks[currentTank]);
 
   const glass = getGlassBounds(view);
   ctx.save();
@@ -130,6 +155,8 @@ function draw() {
   for (const item of getVisibleFish()) {
     drawFish(ctx, item, { palette, getActiveSymptoms, selectedFish });
   }
+  if (currentTank === "sale") drawSaleEffects(ctx, tanks.sale);
+  drawGlassAlgae(ctx, view, tanks[currentTank]);
   ctx.restore();
 
   drawGlass(ctx, view);
@@ -158,6 +185,34 @@ function openJournal() {
 
 function closeJournal() {
   ui.appShell.classList.remove("show-journal");
+}
+
+function openShop() {
+  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  ui.appShell.classList.add("show-shop");
+}
+
+function closeShop() {
+  ui.appShell.classList.remove("show-shop");
+}
+
+function buySnail() {
+  if (!spendForAction("snail")) return;
+  tanks[currentTank].snails = (tanks[currentTank].snails ?? 0) + 1;
+  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} pribyla ampularie. Pomalu cisti rasy ze skla.`);
+}
+
+function buyEggs() {
+  if (tanks.nursery.spawning?.eggs) {
+    addJournalEntry(ui, "Ve treci nadrzi uz je jedna snuska. Nejdřív pockej, az se vylihne.");
+    return;
+  }
+  if (!spendForAction("eggs")) return;
+  addMysteryEggs(tanks.nursery);
+  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  switchTank("nursery");
+  addJournalEntry(ui, "Do treci nadrze byly vlozeny zakoupene jikry nezname linie. Vylihnou se z nich 1–2 rybky.");
 }
 
 function moveSelectedFish() {
@@ -200,18 +255,16 @@ function treatSelectedFish() {
 
 function breedSelectedFish() {
   if (!selectedFish) return;
-  const mate = findMate(selectedFish, fish);
-  if (!mate) {
-    addJournalEntry(ui, `${selectedFish.name}: chybi zdravy dospely partner opacneho pohlavi ve stejne nadrzi.`);
+  if (selectedFish.tank === "nursery") {
+    addJournalEntry(ui, `${selectedFish.name}: uz je ve treci nadrzi.`);
     return;
   }
-  const babies = breedPair(selectedFish, mate, fish);
-  babies.forEach(initializeLifecycle);
-  addFishHistory(ui, selectedFish, `Potomci s rybou ${mate.name}: ${babies.map((baby) => baby.name).join(", ")}.`);
-  addJournalEntry(ui, `V odchovne se narodil poter: ${babies.map((baby) => baby.name).join(" a ")}.`);
+  selectedFish.previousTank = selectedFish.tank;
+  selectedFish.tank = "nursery";
+  addFishHistory(ui, selectedFish, "Presunuta do treci nadrze.");
+  addJournalEntry(ui, `${selectedFish.name}: presunuta do treci nadrze. Pridej zdraveho dospeleho partnera opacneho pohlavi.`);
   currentTank = "nursery";
   updateTankTabs(ui, tanks, currentTank);
-  selectedFish = babies[0];
   renderFishCard(ui, selectedFish);
 }
 
@@ -224,16 +277,14 @@ function sellSelectedFish() {
 }
 
 function startSalesDay() {
-  const result = runSalesDay(fish);
-  if (!result.sold.length && !result.unsold.length) {
+  if (!fish.some((item) => item.tank === "sale")) {
     addJournalEntry(ui, "Prodejni nadrz je prazdna.");
     return;
   }
-  economy.coins += result.income;
-  const soldNames = result.sold.map(({ item }) => item.name).join(", ") || "zadne";
-  addJournalEntry(ui, `Prodejni den: prodano ${soldNames}. Prijem ${result.income} penez. Neprodano ${result.unsold.length}.`);
-  selectedFish = null;
-  clearFishCard(ui);
+  startLiveSales(tanks.sale);
+  currentTank = "sale";
+  updateTankTabs(ui, tanks, currentTank);
+  addJournalEntry(ui, "Prodejni den zacal. Zakaznici prichazeji k nadrzi.");
 }
 
 canvas.addEventListener("click", (event) => {
@@ -242,7 +293,7 @@ canvas.addEventListener("click", (event) => {
   const y = event.clientY - rect.top;
 
   if (heldItem) {
-    if (isPointInTank(x, y)) {
+    if (heldItem !== "clean" && heldItem !== "scrape" && isPointInTank(x, y)) {
       useHeldItem(x, y);
     }
     return;
@@ -265,24 +316,29 @@ window.addEventListener("keydown", (event) => {
     setHeldItem(null);
     deselectFish();
     closeJournal();
+    closeShop();
   }
 });
 
   for (const button of document.querySelectorAll("[data-action]")) {
   button.addEventListener("click", () => {
+    if (button.dataset.action === heldItem) {
+      setHeldItem(null);
+      return;
+    }
     if (button.dataset.action === "journal") {
       openJournal();
+    } else if (button.dataset.action === "shop") {
+      openShop();
     } else if (button.dataset.action === "debug-money" && debugMode) {
       economy.coins += 100;
       addJournalEntry(ui, "Debug: pridano 100 penez.");
     } else if (button.dataset.action === "sales") {
       startSalesDay();
-    } else if (button.dataset.action === "clean") {
-      if (!spendForAction("clean")) return;
-      cleanTank(tanks[currentTank]);
-      addLiquidCloud(getView().width / 2, getView().height - 80, "110, 194, 205", 34);
-      addJournalEntry(ui, t("event.tank_cleaned", { day: gameClock.day, tank: tanks[currentTank].name }));
-      completeAction("clean");
+    } else if (button.dataset.action === "clean" || button.dataset.action === "scrape") {
+      setHeldItem(button.dataset.action);
+    } else if (button.dataset.action === "restart-game") {
+      restartGame();
     } else {
       setHeldItem(button.dataset.action);
     }
@@ -290,6 +346,9 @@ window.addEventListener("keydown", (event) => {
 }
 
 document.getElementById("journalCloseButton").addEventListener("click", closeJournal);
+document.getElementById("shopCloseButton").addEventListener("click", closeShop);
+document.getElementById("buySnailButton").addEventListener("click", buySnail);
+document.getElementById("buyEggsButton").addEventListener("click", buyEggs);
 document.getElementById("fishCardCloseButton").addEventListener("click", deselectFish);
 
 ui.moveFishButton.addEventListener("click", moveSelectedFish);
@@ -308,7 +367,16 @@ for (const button of document.querySelectorAll("[data-window-action]")) {
     if (action === "minimize") window.desktopWindow.minimize();
     if (action === "pin") window.desktopWindow.toggleAlwaysOnTop();
     if (action === "close") window.desktopWindow.close();
+    if (action === "restart") restartGame();
   });
+}
+
+function restartGame() {
+  const confirmed = window.confirm("Opravdu zacit novou hru? Ulozene ryby, penize a postup budou smazany.");
+  if (!confirmed) return;
+  resettingGame = true;
+  clearSavedGame();
+  location.reload();
 }
 
 const dragHandle = document.querySelector(".drag-handle");
@@ -342,6 +410,11 @@ function setHeldItem(action) {
     return;
   }
   heldItem = action;
+  canvas.classList.toggle("maintenance-cursor", heldItem === "clean" || heldItem === "scrape");
+  if (heldItem !== "clean" && heldItem !== "scrape") {
+    toolOverGlass = false;
+    canvas.classList.remove("tool-over-glass");
+  }
   for (const button of document.querySelectorAll("[data-action]")) {
     button.classList.toggle("selected", button.dataset.action === heldItem);
   }
@@ -349,7 +422,13 @@ function setHeldItem(action) {
   if (heldItem === "test") addLog(ui, "V ruce: test ph. Klikni do vody.");
   if (heldItem === "plant") addLog(ui, "V ruce: rostlina. Klikni na misto v nadrzi.");
   if (heldItem === "medicine") addLog(ui, "V ruce: lek. Klikni do vody nebo pouzij kartu ryby.");
+  if (heldItem === "clean") addJournalEntry(ui, "Odkalovac: drz tlacitko mysi a pomalu prejizdej po dne.");
+  if (heldItem === "scrape") addJournalEntry(ui, "Skrabka: drz tlacitko mysi a prejizdej po skle s rasou.");
   updateHeldCursor();
+  if (heldItem === "clean") {
+    siphonLoad = 0;
+    ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
+  }
 }
 
 function useHeldItem(x, y) {
@@ -409,6 +488,21 @@ function restoreSavedGame() {
     const starterMale = fish.find((item) => item.id === "f2");
     if (starterMale) starterMale.ageDays = Math.max(32, starterMale.ageDays ?? 0);
   }
+  if ((saved.version ?? 1) < 3) {
+    saved.tanks ??= {};
+    saved.tanks.main ??= {};
+    saved.tanks.main.waste = Math.max(0.34, saved.tanks.main.waste ?? 0);
+    saved.tanks.main.debris = Math.max(0.42, saved.tanks.main.debris ?? 0);
+    saved.tanks.main.brownWater = Math.max(0.3, saved.tanks.main.brownWater ?? 0);
+    saved.tanks.main.algae = Math.max(0.48, saved.tanks.main.algae ?? 0);
+  }
+  if ((saved.version ?? 1) < 4) {
+    saved.tanks ??= {};
+    saved.tanks.main ??= {};
+    saved.tanks.main.debris = Math.max(0.48, saved.tanks.main.debris ?? 0);
+    saved.tanks.main.brownWater = Math.max(0.34, saved.tanks.main.brownWater ?? 0);
+    saved.tanks.main.algae = Math.max(0.56, saved.tanks.main.algae ?? 0);
+  }
   restoreArray(plants.main, saved.plants?.main);
   restoreArray(plants.quarantine, saved.plants?.quarantine);
   restoreArray(plants.nursery, saved.plants?.nursery);
@@ -425,6 +519,7 @@ function restoreSavedGame() {
 }
 
 function persistGame() {
+  if (resettingGame) return;
   saveGame({ fish, plants, tanks, economy, gameClock });
 }
 
@@ -435,6 +530,57 @@ function isPointInTank(x, y) {
   const view = getView();
   const glass = getGlassBounds(view);
   return x >= glass.left && x <= glass.right && y >= 42 && y <= view.height - 32;
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (heldItem !== "clean" && heldItem !== "scrape") return;
+  if (!spendForAction(heldItem)) return;
+  maintenanceDragging = true;
+  ui.heldCursor.classList.add("working");
+  canvas.setPointerCapture(event.pointerId);
+  applyMaintenance(event);
+});
+
+canvas.addEventListener("contextmenu", (event) => {
+  if (!heldItem) return;
+  event.preventDefault();
+  maintenanceDragging = false;
+  setHeldItem(null);
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  if (maintenanceDragging) applyMaintenance(event);
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  if (!maintenanceDragging) return;
+  maintenanceDragging = false;
+  ui.heldCursor.classList.remove("working");
+  canvas.releasePointerCapture(event.pointerId);
+  if (heldItem === "clean") {
+    ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
+    siphonLoad = 0;
+    completeAction("clean");
+  }
+});
+
+function applyMaintenance(event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if (!isPointInTank(x, y)) return;
+  if (heldItem === "clean" && y > rect.height - 190) {
+    const before = tanks[currentTank].debris ?? 0;
+    vacuumTank(tanks[currentTank], x / rect.width, 0.055, 0.055);
+    const removed = Math.max(0, before - (tanks[currentTank].debris ?? 0));
+    siphonLoad = Math.min(0.92, siphonLoad + removed * 9 + 0.018);
+    ui.heldCursor.style.setProperty("--siphon-turbidity", siphonLoad.toFixed(2));
+  }
+  if (heldItem === "scrape") {
+    const waterTop = getSurfaceY(getView());
+    const usableHeight = Math.max(1, rect.height - waterTop - 25);
+    scrapeAlgae(tanks[currentTank], x / rect.width, (y - waterTop) / usableHeight, 0.075, 0.06);
+  }
 }
 
 function addFoodAt(x, y) {
@@ -542,7 +688,21 @@ function loop(now) {
 
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("pointermove", (event) => {
+  const dx = event.clientX - pointer.x;
+  const dy = event.clientY - pointer.y;
+  if ((heldItem === "clean" || heldItem === "scrape") && Math.hypot(dx, dy) > 2) {
+    toolTargetAngle = Math.atan2(dy, dx) + (heldItem === "scrape" ? -Math.PI / 2 : Math.PI / 2);
+    const turn = Math.atan2(Math.sin(toolTargetAngle - toolAngle), Math.cos(toolTargetAngle - toolAngle));
+    toolAngle += turn * 0.16;
+  }
   pointer = { x: event.clientX, y: event.clientY };
+  if (heldItem === "clean" || heldItem === "scrape") {
+    const rect = canvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    toolOverGlass = event.target === canvas && isPointInTank(localX, localY);
+    canvas.classList.toggle("tool-over-glass", toolOverGlass);
+  }
   updateHeldCursor();
 });
 resizeCanvas();
@@ -556,6 +716,15 @@ function updateHeldCursor() {
     ui.heldCursor.style.transform = "translate(-100px, -100px)";
     return;
   }
+  if ((heldItem === "clean" || heldItem === "scrape") && !toolOverGlass) {
+    ui.heldCursor.style.transform = "translate(-200px, -200px)";
+    return;
+  }
   ui.heldCursor.classList.add("visible", heldItem);
-  ui.heldCursor.style.transform = `translate(${pointer.x + 14}px, ${pointer.y + 14}px)`;
+  if (maintenanceDragging) ui.heldCursor.classList.add("working");
+  const maintenanceTool = heldItem === "clean" || heldItem === "scrape";
+  const x = pointer.x + (maintenanceTool ? 0 : 14);
+  const y = pointer.y + (maintenanceTool ? 0 : 14);
+  const rotation = maintenanceTool ? ` rotate(${toolAngle}rad)` : "";
+  ui.heldCursor.style.transform = `translate(${x}px, ${y}px)${rotation}`;
 }

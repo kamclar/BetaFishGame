@@ -60,7 +60,6 @@ function drawCustomers(ctx, view, tank) {
 }
 
 function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
-  if (!Number.isFinite(visitor.lookX) || !Number.isFinite(visitor.lookY)) return;
   const eyePixels = [
     [[52.5, 69], [74.5, 69]],
     [[50.5, 48], [76.5, 48]],
@@ -71,13 +70,21 @@ function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
   const scaleY = height / 160;
   const eyes = eyePixels[visitor.type].map(([x, y]) => ({ x: centerX - width / 2 + x * scaleX, y: top + y * scaleY }));
   const baseY = (eyes[0].y + eyes[1].y) / 2;
-  const targetDx = visitor.lookX - centerX;
-  const targetDy = visitor.lookY - baseY;
+  const hasTarget = Number.isFinite(visitor.lookX) && Number.isFinite(visitor.lookY);
+  const targetDx = hasTarget ? visitor.lookX - centerX : 0;
+  const targetDy = hasTarget ? visitor.lookY - baseY : 0;
   const length = Math.max(1, Math.hypot(targetDx, targetDy));
   const offsetX = targetDx / length * 2.2;
   const offsetY = targetDy / length * 1.5;
-  ctx.fillStyle = "#eee3cf";
-  for (const eye of eyes) ctx.fillRect(Math.round(eye.x - 7), Math.round(eye.y - 5), 14, 10);
+  // Velka bila podkladova plocha je schovana pod oblicejem. Videt je jen skrz
+  // pruhledne otvory v eye-mask PNG, takze masku lze rucne posouvat bez uprav kodu.
+  ctx.fillStyle = "#fffdf2";
+  ctx.fillRect(
+    Math.round(centerX - width / 2 + 32 * scaleX),
+    Math.round(top + 34 * scaleY),
+    Math.round(64 * scaleX),
+    Math.round(38 * scaleY),
+  );
   ctx.fillStyle = "#171311";
   for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 2), Math.round(eye.y + offsetY - 2), 5, 5);
   ctx.fillStyle = "#e8dfc9";

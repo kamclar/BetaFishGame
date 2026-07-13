@@ -40,6 +40,7 @@
               <span id="waterQuality">Voda: dobra</span>
               <span id="coinCount">36 penez</span>
               <span id="currentTask">Nakrm ryby 0/2</span>
+              <span id="customerContract">Zakazka se pripravuje</span>
             </div>
           </div>
         </div>
@@ -50,7 +51,7 @@
         <div class="shelf" aria-label="Police s predmety">
           <button class="shelf-item" type="button" data-action="feed" title="Nakrm ryby">
             <span class="jar flakes"></span>
-            <span>Vlocky</span>
+            <span>Vlocky <small id="foodDoseCount">12 davek</small></span>
           </button>
           <button class="shelf-item" type="button" data-action="test" title="Zmer vodu">
             <span class="jar test"></span>
@@ -119,6 +120,7 @@
               <dd id="fishRarity">-</dd>
             </div>
             <div><dt>Pohlavi</dt><dd id="fishSex">-</dd></div>
+            <div><dt>Kategorie</dt><dd id="fishCategory">-</dd></div>
             <div><dt>Rodice</dt><dd id="fishParents">-</dd></div>
             <div><dt>Potomci</dt><dd id="fishOffspring">-</dd></div>
           </dl>
@@ -151,6 +153,11 @@
         <p class="eyebrow">Akvaristicky obchod</p>
         <div class="shop-balance" id="shopBalance">0 penez</div>
         <div class="shop-grid">
+          <button type="button" id="buyFoodButton" class="shop-product">
+            <span class="shop-product-icon jar flakes"></span>
+            <span><strong>Krabicka vlocek</strong><small>Obsahuje 12 krmnych davek.</small></span>
+            <b>10 penez</b>
+          </button>
           <button type="button" id="buySnailButton" class="shop-product">
             <span class="shop-product-icon snail-icon">@</span>
             <span><strong>Ampularie</strong><small>Pomalu spasa rasy ze skla.</small></span>

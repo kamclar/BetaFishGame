@@ -19,9 +19,74 @@ const nurseryBottomImage = new Image();
 nurseryBottomImage.src = "./assets/decor/nursery_bottom.png";
 const snailImage = new Image();
 snailImage.src = "./assets/creatures/ampullaria.png";
+const customerEyePositions = [];
+const fallbackCustomerEyes = [
+  [[53, 71], [82, 69]],
+  [[52, 50], [76, 50]],
+  [[50, 54], [72, 51]],
+  [[50, 60], [71, 57]],
+];
 const customerImages = Array.from({ length: 4 }, (_, index) => {
-  const image = new Image(); image.src = `./assets/customers/customer_${index}_eye_mask.png`; return image;
+  const image = new Image();
+  const original = new Image();
+  const updateEyePositions = () => {
+    if (!image.complete || !image.naturalWidth || !original.complete || !original.naturalWidth) return;
+    customerEyePositions[index] = findEyeHoles(image, original) ?? fallbackCustomerEyes[index];
+  };
+  image.addEventListener("load", updateEyePositions);
+  original.addEventListener("load", updateEyePositions);
+  image.src = `./assets/customers/customer_${index}_eye_mask.png`;
+  original.src = `./assets/customers/customer_${index}.png`;
+  return image;
 });
+
+function findEyeHoles(image, original) {
+  const sample = document.createElement("canvas");
+  sample.width = image.naturalWidth;
+  sample.height = image.naturalHeight;
+  const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+  sampleCtx.drawImage(image, 0, 0);
+  const { data } = sampleCtx.getImageData(0, 0, sample.width, sample.height);
+  sampleCtx.clearRect(0, 0, sample.width, sample.height);
+  sampleCtx.drawImage(original, 0, 0);
+  const originalData = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
+  const visited = new Uint8Array(sample.width * sample.height);
+  const holes = [];
+  for (let y = 1; y < sample.height - 1; y += 1) {
+    for (let x = 1; x < sample.width - 1; x += 1) {
+      const start = y * sample.width + x;
+      if (visited[start] || data[start * 4 + 3] > 32 || originalData[start * 4 + 3] < 96) continue;
+      const queue = [start];
+      visited[start] = 1;
+      let head = 0, touchesEdge = false, sumX = 0, sumY = 0, count = 0;
+      while (head < queue.length) {
+        const pixel = queue[head++];
+        const px = pixel % sample.width;
+        const py = Math.floor(pixel / sample.width);
+        sumX += px; sumY += py; count += 1;
+        if (px === 0 || py === 0 || px === sample.width - 1 || py === sample.height - 1) touchesEdge = true;
+        for (const next of [pixel - 1, pixel + 1, pixel - sample.width, pixel + sample.width]) {
+          if (next < 0 || next >= visited.length || visited[next] || data[next * 4 + 3] > 32 || originalData[next * 4 + 3] < 96) continue;
+          visited[next] = 1; queue.push(next);
+        }
+      }
+      const centerX = sumX / count;
+      const centerY = sumY / count;
+      if (!touchesEdge && count <= 160 && centerX > 28 && centerX < 100 && centerY > 32 && centerY < 82) holes.push({ x: centerX, y: centerY, count });
+    }
+  }
+  const mergeSide = (parts) => {
+    const weight = parts.reduce((sum, part) => sum + part.count, 0);
+    if (!weight) return null;
+    return [
+      parts.reduce((sum, part) => sum + part.x * part.count, 0) / weight,
+      parts.reduce((sum, part) => sum + part.y * part.count, 0) / weight,
+    ];
+  };
+  const leftEye = mergeSide(holes.filter((hole) => hole.x < sample.width / 2));
+  const rightEye = mergeSide(holes.filter((hole) => hole.x >= sample.width / 2));
+  return leftEye && rightEye ? [leftEye, rightEye] : null;
+}
 
 export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   if (tankId === "sale") drawCustomers(ctx, view, tank);
@@ -51,8 +116,10 @@ function drawCustomers(ctx, view, tank) {
     const bottom = view.height + 68;
     const top = bottom - height;
     ctx.save();
-    ctx.globalAlpha = visitor.state === "leaving" ? 0.64 : 0.78;
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.imageSmoothingEnabled = false;
+    // 1) bile pozadi, 2) zornice, 3) maskovany sprite postavy navrchu.
     drawCustomerEyes(ctx, visitor, x, top, width, height);
     ctx.drawImage(image, x - width / 2, top, width, height);
     ctx.restore();
@@ -60,15 +127,10 @@ function drawCustomers(ctx, view, tank) {
 }
 
 function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
-  const eyePixels = [
-    [[52.5, 69], [74.5, 69]],
-    [[50.5, 48], [76.5, 48]],
-    [[52, 54], [76, 54]],
-    [[51.5, 58], [74.5, 58]],
-  ];
+  const eyePixels = customerEyePositions[visitor.type] ?? fallbackCustomerEyes[visitor.type];
   const scaleX = width / 128;
   const scaleY = height / 160;
-  const eyes = eyePixels[visitor.type].map(([x, y]) => ({ x: centerX - width / 2 + x * scaleX, y: top + y * scaleY }));
+  const eyes = eyePixels.map(([x, y]) => ({ x: centerX - width / 2 + x * scaleX, y: top + y * scaleY }));
   const baseY = (eyes[0].y + eyes[1].y) / 2;
   const hasTarget = Number.isFinite(visitor.lookX) && Number.isFinite(visitor.lookY);
   const targetDx = hasTarget ? visitor.lookX - centerX : 0;
@@ -76,19 +138,17 @@ function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
   const length = Math.max(1, Math.hypot(targetDx, targetDy));
   const offsetX = targetDx / length * 2.2;
   const offsetY = targetDy / length * 1.5;
-  // Velka bila podkladova plocha je schovana pod oblicejem. Videt je jen skrz
-  // pruhledne otvory v eye-mask PNG, takze masku lze rucne posouvat bez uprav kodu.
-  ctx.fillStyle = "#fffdf2";
-  ctx.fillRect(
-    Math.round(centerX - width / 2 + 32 * scaleX),
-    Math.round(top + 34 * scaleY),
-    Math.round(64 * scaleX),
-    Math.round(38 * scaleY),
-  );
+  // Bila plocha tesne za oblastí obou oci; sprite ji prekryje mimo alfa masku.
+  ctx.fillStyle = "#f0ecd4";
+  const eyeBandLeft = Math.min(...eyes.map((eye) => eye.x)) - 15;
+  const eyeBandRight = Math.max(...eyes.map((eye) => eye.x)) + 15;
+  const eyeBandTop = Math.min(...eyes.map((eye) => eye.y)) - 12;
+  const eyeBandBottom = Math.max(...eyes.map((eye) => eye.y)) + 12;
+  ctx.fillRect(Math.round(eyeBandLeft), Math.round(eyeBandTop), Math.round(eyeBandRight - eyeBandLeft), Math.round(eyeBandBottom - eyeBandTop));
   ctx.fillStyle = "#171311";
-  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 2), Math.round(eye.y + offsetY - 2), 5, 5);
+  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 3), Math.round(eye.y + offsetY - 3), 10,10);
   ctx.fillStyle = "#e8dfc9";
-  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 1), Math.round(eye.y + offsetY - 1), 1, 1);
+  for (const eye of eyes) ctx.fillRect(Math.round(eye.x + offsetX - 1), Math.round(eye.y + offsetY - 2), 2, 2);
 }
 
 export function drawSaleEffects(ctx, tank) {

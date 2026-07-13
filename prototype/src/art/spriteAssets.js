@@ -1,4 +1,5 @@
 import { fishSpriteParts, speciesSpriteDefaults, spriteConfig } from "./assetManifest.js";
+import { attachmentOffset, bodyAnatomy, dorsalFinAnatomy, tailAnatomy, ventralFinAnatomy } from "./fishAnatomy.js";
 
 const cache = new Map();
 const tintedCache = new Map();
@@ -26,9 +27,12 @@ export function drawFishSprites(ctx, item, options) {
   const { activeSymptoms } = options;
   if (item.specialSprite) {
     const file = fishSpriteParts.special[item.specialSprite];
-    const image = cache.get(file);
-    if (!image || !image.complete || image.naturalWidth === 0) return false;
-    const frameCount = Math.max(1, Math.floor(image.naturalWidth / spriteConfig.frameWidth));
+    const image = item.specialSprite === "cthulhu"
+      ? getTintedLayer(file, "base", options.palette[item.color])
+      : cache.get(file);
+    const imageWidth = image?.naturalWidth ?? image?.width ?? 0;
+    if (!image || image.complete === false || imageWidth === 0) return false;
+    const frameCount = Math.max(1, Math.floor(imageWidth / spriteConfig.frameWidth));
     const animationSpeed = item.spriteAnimationSpeed ?? 1;
     const frame = Math.floor(item.phase * animationSpeed) % frameCount;
     ctx.drawImage(image, frame * spriteConfig.frameWidth, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
@@ -38,33 +42,41 @@ export function drawFishSprites(ctx, item, options) {
   const defaults = speciesSpriteDefaults[item.species] || speciesSpriteDefaults["Sklenena strelka"];
   const frame = Math.floor(item.phase * 2) % spriteConfig.frameCount;
   const finsKey = activeSymptoms.includes("clampedFins") ? "clamped" : defaults.fins;
-  const bodyFile = fishSpriteParts.body[defaults.body];
-  const layers = [
-    { file: fishSpriteParts.tail[item.tail], tint: "shadow", frame },
-    { file: bodyFile, tint: "base", frame },
-    { file: fishSpriteParts.fins[finsKey], tint: "shadow", frame: 0 },
-    { file: fishSpriteParts.pattern[item.pattern], tint: null, frame: 0, clipTo: bodyFile },
-    ...activeSymptoms.map((symptomId) => ({ file: fishSpriteParts.symptoms[symptomId], tint: null, frame, clipTo: bodyFile })),
-  ].filter((layer) => layer.file);
+  const body = bodyAnatomy[item.body ?? defaults.body] ?? bodyAnatomy.slender;
+  const tail = tailAnatomy[item.tail] ?? tailAnatomy.short;
+  const dorsalFin = dorsalFinAnatomy[item.dorsalFin ?? finsKey] ?? dorsalFinAnatomy.normal;
+  const ventralFin = ventralFinAnatomy[item.ventralFin ?? finsKey] ?? ventralFinAnatomy.normal;
+  const colors = options.palette[item.color];
+  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tail.scale * body.partScales.tail, colors)) return false;
+  // Attachment roots belong behind the body. Drawing the body last hides the
+  // hard socket edges and makes the independently animated parts read as one fish.
+  if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, body.anchors.dorsal, dorsalFin.socket, dorsalFin.scale * body.partScales.dorsal, colors)) return false;
+  if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, body.anchors.ventral, ventralFin.socket, ventralFin.scale * body.partScales.ventral, colors)) return false;
+  if (!drawAttachedPart(ctx, body.file, "base", 0, [0, 0], [0, 0], body.scale, colors)) return false;
 
-  for (const layer of layers) {
-    const image = layer.clipTo
-      ? getClippedLayer(layer.file, layer.clipTo, layer.frame)
-      : getTintedLayer(layer.file, layer.tint, options.palette[item.color]);
+  const overlays = [
+    { file: fishSpriteParts.pattern[item.pattern], frame: 0 },
+    ...activeSymptoms.map((symptomId) => ({ file: fishSpriteParts.symptoms[symptomId], frame })),
+  ].filter((layer) => layer.file);
+  for (const layer of overlays) {
+    const image = getClippedLayer(layer.file, body.file, layer.frame);
     if (!image) return false;
-    ctx.drawImage(
-      image,
-      layer.clipTo ? 0 : layer.frame * spriteConfig.frameWidth,
-      0,
-      spriteConfig.frameWidth,
-      spriteConfig.frameHeight,
-      -spriteConfig.frameWidth / 2,
-      -spriteConfig.frameHeight / 2,
-      spriteConfig.frameWidth,
-      spriteConfig.frameHeight
-    );
+    ctx.drawImage(image, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
+      -spriteConfig.frameWidth / 2, -spriteConfig.frameHeight / 2, spriteConfig.frameWidth, spriteConfig.frameHeight);
   }
 
+  return true;
+}
+
+function drawAttachedPart(ctx, file, tint, frame, anchor, socket, scale, colors) {
+  const image = getTintedLayer(file, tint, colors);
+  if (!image) return false;
+  const offset = attachmentOffset(anchor, socket, scale);
+  ctx.drawImage(image, frame * spriteConfig.frameWidth, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
+    -spriteConfig.frameWidth / 2 + offset.x,
+    -spriteConfig.frameHeight / 2 + offset.y,
+    spriteConfig.frameWidth * scale,
+    spriteConfig.frameHeight * scale);
   return true;
 }
 
@@ -118,7 +130,6 @@ function getTintedLayer(file, tint, colors) {
 function recolorMaskPixels(ctx, width, height, colors) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
-  let changed = 0;
   const shadow = hexToRgb(colors[1]);
   const base = hexToRgb(colors[0]);
   const highlight = hexToRgb(colors[2]);
@@ -130,42 +141,27 @@ function recolorMaskPixels(ctx, width, height, colors) {
     const red = data[i];
     const green = data[i + 1];
     const blue = data[i + 2];
+    if (red >= 250 && green >= 250 && blue >= 250) continue;
     const key = `${red},${green},${blue}`;
     const target = getPaletteReplacement(key, colors);
-    if (!target) continue;
-
-    data[i] = target.r;
-    data[i + 1] = target.g;
-    data[i + 2] = target.b;
-    changed += 1;
-  }
-
-  if (changed === 0) {
-    recolorByLuminance(data, shadow, base, highlight);
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function recolorByLuminance(data, shadow, base, highlight) {
-  for (let i = 0; i < data.length; i += 4) {
-    const alpha = data[i + 3];
-    if (alpha === 0) continue;
-
-    const red = data[i];
-    const green = data[i + 1];
-    const blue = data[i + 2];
-    const max = Math.max(red, green, blue);
-    const min = Math.min(red, green, blue);
-    const saturation = max === 0 ? 0 : (max - min) / max;
-    if (saturation < 0.05 && max > 35) continue;
+    if (target) {
+      data[i] = target.r;
+      data[i + 1] = target.g;
+      data[i + 2] = target.b;
+      continue;
+    }
 
     const luminance = (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
-    const target = mixThree(shadow, base, highlight, luminance);
+    // Preserve the almost-black pixel outline; tint every other source shade,
+    // including the slightly blue-gray pixels present in the fin sprites.
+    if (luminance <= 0.045) continue;
+    const mapped = mixThree(shadow, base, highlight, luminance);
     const detail = 0.7 + luminance * 0.58;
-    data[i] = clamp(target.r * detail);
-    data[i + 1] = clamp(target.g * detail);
-    data[i + 2] = clamp(target.b * detail);
+    data[i] = clamp(mapped.r * detail);
+    data[i + 1] = clamp(mapped.g * detail);
+    data[i + 2] = clamp(mapped.b * detail);
   }
+  ctx.putImageData(imageData, 0, 0);
 }
 
 function mixThree(shadow, base, highlight, t) {
@@ -187,6 +183,10 @@ function clamp(value) {
 
 function getPaletteReplacement(rgb, colors) {
   const map = {
+    "38,38,38": colors[1],
+    "92,92,92": colors[1],
+    "166,166,166": colors[0],
+    "236,236,236": colors[2],
     "64,64,64": colors[1],
     "128,128,128": colors[0],
     "192,192,192": colors[2],

@@ -1,5 +1,6 @@
 import { diseaseDatabase, symptomDatabase } from "./systems/healthSystem.js";
 import { describeHealth, describeStress, getActiveSymptoms, getDiseaseStage } from "./systems/healthSystem.js";
+import { categoryName } from "./data/speciesData.js";
 
 const traitInfo = {
   klidna: ["Klidna", "Pomaleji se stresuje."], skvrnita: ["Skvrnita", "Vyrazny dedicny vzor."],
@@ -9,6 +10,25 @@ const traitInfo = {
   plodna: ["Plodna", "Vyssi chovna hodnota."], robustni: ["Robustni", "Lepe zvlada nemoci."],
   jeskynni: ["Jeskynni", "Adaptovana na slabe svetlo."], slepa: ["Slepa", "Orientuje se jinymi smysly."],
   echolokacni: ["Echolokacni", "V klidne nadrzi rychleji odbourava stres."],
+  neznamyVyrustek: ["Neznamy vyrustek", "Dedicny znak, ktery atlas nedokaze zaradit."],
+  hlubinnaOdezva: ["Hlubinna odezva", "Po setmeni reaguje na neznamy podnet."],
+  promenenyOcas: ["Promeneny ocas", "Okraj ploutve se rozdělil do samostatne se pohybujicich laloku."],
+  druheOci: ["Druhe oci", "Dve drobne oci se otevřely az v dalsi generaci."],
+  ociPodKuzi: ["Oci pod kuzi", "Dalsi oci se oteviraji jen na kratky okamzik."],
+  nehybnyPohled: ["Nehybny pohled", "Puvodni klid se zmenil v dlouhe nehybne pozorovani."],
+  putujiciKresba: ["Putujici kresba", "Skvrny po setmeni pomalu meni polohu."],
+  bezesny: ["Bezesny", "Ryba neprechazi do bezneho nocniho klidu."],
+  hadovityPohyb: ["Hadovity pohyb", "Telo se pri plavani vlni v nezvyklem rytmu."],
+  slysiHlubiny: ["Slysi hlubiny", "Otaci se za zvukem, ktery neni slyset."],
+  prazdnyOdraz: ["Prazdny odraz", "Ve skle se jeji oko nekdy neodrazi."],
+  studeneSvetlo: ["Studene svetlo", "Zare nereaguje na bezne osvetleni nadrze."],
+  kostenePaprsky: ["Kostene paprsky", "Mekke ploutve nahradily tvrde clenene vyrustky."],
+  ciziSnuska: ["Cizi snuska", "Jikry se vyvijeji jinak nez u puvodni linie."],
+  ciziMetabolismus: ["Cizi metabolismus", "Potrebuje mene potravy, ale citliveji reaguje na vodu."],
+  vidiZaSklem: ["Vidi za sklem", "Sleduje pohyb i mimo osvetlenou cast nadrze."],
+  vnitrniZrak: ["Vnitrni zrak", "Slepa linie zacala reagovat drive, nez se podnet objevi."],
+  mnohooci: ["Mnohooci", "Drobne oci sleduji ruzne smery nezavisle."],
+  volaniHlubin: ["Volani hlubin", "Jeji linie muze ukryvat dalsi neznamy stupen."],
 };
 
 export function createUi() {
@@ -21,6 +41,7 @@ export function createUi() {
     fishAge: document.getElementById("fishAge"),
     fishRarity: document.getElementById("fishRarity"),
     fishSex: document.getElementById("fishSex"),
+    fishCategory: document.getElementById("fishCategory"),
     fishParents: document.getElementById("fishParents"),
     fishOffspring: document.getElementById("fishOffspring"),
     fishHistory: document.getElementById("fishHistory"),
@@ -41,6 +62,7 @@ export function createUi() {
     waterQuality: document.getElementById("waterQuality"),
     coinCount: document.getElementById("coinCount"),
     currentTask: document.getElementById("currentTask"),
+    customerContract: document.getElementById("customerContract"),
     journalCount: document.getElementById("journalCount"),
   };
   restoreJournal(ui);
@@ -102,6 +124,7 @@ export function renderFishCard(ui, item) {
   ui.fishRarity.textContent = item.rarity;
   ui.appShell.dataset.rarity = item.rarity.toLowerCase();
   ui.fishSex.textContent = item.sex ?? "nezname";
+  ui.fishCategory.textContent = categoryName(item.category);
   ui.fishParents.textContent = item.parents?.length ? item.parents.join(", ") : "neznamí";
   ui.fishOffspring.textContent = String(item.offspring?.length ?? 0);
   ui.traitList.innerHTML = "";
@@ -129,6 +152,7 @@ export function clearFishCard(ui) {
   ui.fishAge.textContent = "-";
   ui.fishRarity.textContent = "-";
   ui.fishSex.textContent = "-";
+  ui.fishCategory.textContent = "-";
   ui.fishParents.textContent = "-";
   ui.fishOffspring.textContent = "-";
   ui.traitList.innerHTML = "";

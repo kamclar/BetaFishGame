@@ -21,7 +21,7 @@ export function runSalesDay(fish) {
   const sold = [], unsold = [];
   for (const item of offered) {
     const appeal = 0.4 + Math.min(0.42, item.traits.length * 0.08 + (item.rarity !== "Common" ? 0.14 : 0));
-    if (Math.random() < appeal) sold.push({ item, price: item.salePrice ?? fishValue(item) });
+    if (Math.random() < Math.min(appeal, purchaseChance(item))) sold.push({ item, price: item.salePrice ?? fishValue(item) });
     else { item.stress = Math.min(100, item.stress + 8); unsold.push(item); }
   }
   sold.forEach(({ item }) => fish.splice(fish.indexOf(item), 1));
@@ -61,15 +61,29 @@ export function updateLiveSales(delta, tank, fish, economy, onSale) {
     const focus = visibleFish.sort((a, b) => customerScore(b, visitor.type) - customerScore(a, visitor.type))[0];
     if (focus) {
       visitor.focusFishId = focus.id;
-      visitor.lookX = focus.x;
-      visitor.lookY = focus.y;
+      visitor.gazeTimer = (visitor.gazeTimer ?? 0) - delta;
+      if (visitor.gazeTimer <= 0 || !Number.isFinite(visitor.gazeTargetX)) {
+        const glanceFish = Math.random() < 0.28
+          ? visibleFish[Math.floor(Math.random() * visibleFish.length)] ?? focus
+          : focus;
+        visitor.gazeTargetX = glanceFish.x + (Math.random() - 0.5) * 90;
+        visitor.gazeTargetY = glanceFish.y + (Math.random() - 0.5) * 55;
+        visitor.gazeTimer = 0.45 + Math.random() * 1.8;
+      }
+      const gazeEase = Math.min(1, delta * (2.4 + Math.random() * 1.2));
+      visitor.lookX = Number.isFinite(visitor.lookX)
+        ? visitor.lookX + (visitor.gazeTargetX - visitor.lookX) * gazeEase
+        : visitor.gazeTargetX;
+      visitor.lookY = Number.isFinite(visitor.lookY)
+        ? visitor.lookY + (visitor.gazeTargetY - visitor.lookY) * gazeEase
+        : visitor.gazeTargetY;
     }
     if (Math.abs(visitor.x - visitor.targetX) > 0.02) continue;
     visitor.state = "watching";
     visitor.timer -= delta;
     if (visitor.timer > 0) continue;
     const chosen = visibleFish[0];
-    if (chosen && Math.random() < 0.72) {
+    if (chosen && Math.random() < purchaseChance(chosen)) {
       const price = chosen.salePrice ?? fishValue(chosen);
       economy.coins += price;
       fish.splice(fish.indexOf(chosen), 1);
@@ -82,8 +96,18 @@ export function updateLiveSales(delta, tank, fish, economy, onSale) {
 
 function customerScore(item, type) {
   const rarity = rarityValue[item.rarity] ?? 8;
-  if (type === 0) return 100 - (item.salePrice ?? 10) + item.traits.length * 4;
-  if (type === 1) return item.health + item.traits.length * 8;
-  if (type === 2) return rarity * 3 + (item.pattern === "glow" ? 35 : 0);
-  return item.health + (item.parents?.length ? 25 : 0);
+  const illnessPenalty = item.diseases?.length ? 300 : item.symptoms?.length ? 95 : 0;
+  if (type === 0) return 100 - (item.salePrice ?? 10) + item.traits.length * 4 - illnessPenalty;
+  if (type === 1) return item.health + item.traits.length * 8 - illnessPenalty;
+  if (type === 2) return rarity * 3 + (item.pattern === "glow" ? 35 : 0) - illnessPenalty;
+  return item.health + (item.parents?.length ? 25 : 0) - illnessPenalty;
+}
+
+function purchaseChance(item) {
+  if (item.diseases?.length) return 0.015;
+  if (item.symptoms?.length) return 0.08;
+  const health = item.visibleHealth ?? item.health ?? 100;
+  if (health < 40) return 0.12;
+  if (health < 65) return 0.34;
+  return 0.72;
 }

@@ -62,7 +62,8 @@ export function updateWorld(delta, tanks, plants, fish, onNewDay) {
 }
 
 export function applyTankEffects(item, delta, tank) {
-  const badWater = Math.max(0, 0.78 - tank.waterQuality);
+  const waterSensitivity = item.traits.includes("ciziMetabolismus") ? 1.45 : 1;
+  const badWater = Math.max(0, 0.78 - tank.waterQuality) * waterSensitivity;
   const hungerStress = Math.max(0, item.hunger - 72) / 28;
   const calmRecovery = item.traits.includes("echolokacni") ? 0.06 : 0.035;
   item.stress = Math.max(0, Math.min(100, item.stress + delta * (badWater * 1.9 + hungerStress * 0.32 - calmRecovery)));

@@ -14,7 +14,9 @@ export function drawFish(ctx, item, options) {
   ctx.save();
   ctx.translate(item.x, item.y);
   ctx.scale(dir * scale, scale);
-  if (isWeak) ctx.globalAlpha = 0.72;
+  // Modular parts are opaque masks. Weakness is expressed by symptoms and
+  // movement; reducing alpha made the aquarium background show through them.
+  if (isWeak && item.specialSprite) ctx.globalAlpha = 0.72;
 
   const spriteDrawn = drawFishSprites(ctx, item, { activeSymptoms, palette });
   if (!spriteDrawn) {

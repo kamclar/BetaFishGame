@@ -4,15 +4,18 @@ import { drawFish } from "./art/fishArt.js";
 import { fishRenderScale } from "./art/fishArt.js";
 import { loadFishSpriteAssets } from "./art/spriteAssets.js";
 import { fish, palette, plants, tanks } from "./data/fishData.js";
+import { applySpeciesMetadata } from "./data/speciesData.js";
 import { createPlant, plantTypes, plantTypeOrder } from "./data/plantData.js";
 import { diseaseDatabase } from "./data/healthData.js";
 import { initializeLifecycle, updateLifecycle } from "./systems/lifecycleSystem.js";
 import { applyTankEffects, describeWater, formatGameTime, gameClock, scrapeAlgae, updateWorld, vacuumTank } from "./systems/tankSystem.js";
-import { actionCosts, canAfford, economy, initializeEconomy, payForAction, recordAction, taskText } from "./systems/economySystem.js";
+import { actionCosts, addSupply, canAfford, consumeSupply, economy, initializeEconomy, payForAction, recordAction, supplyCount, taskText } from "./systems/economySystem.js";
 import { clearSavedGame, loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
 import { addMysteryEggs, initializeBreeding, updateSpawning } from "./systems/breedingSystem.js";
 import { prepareForSale, startLiveSales, updateLiveSales } from "./systems/salesSystem.js";
+import { contractText, ensureContract, recordContractSale } from "./systems/contractSystem.js";
+import { eldritchJournalEntry } from "./systems/eldritchSystem.js";
 import {
   exposeTankToTrouble,
   getActiveSymptoms,
@@ -28,8 +31,10 @@ const canvas = document.getElementById("aquarium");
 const ctx = canvas.getContext("2d");
 const ui = createUi();
 loadFishSpriteAssets();
-initializeEconomy();
 restoreSavedGame();
+initializeEconomy();
+applySpeciesMetadata(fish);
+ensureContract(economy);
 for (const item of fish) initializeLifecycle(item);
 initializeBreeding(fish);
 for (const item of fish) item.traits = item.traits.map((trait) => trait === "ticha" ? "echolokacni" : trait);
@@ -87,7 +92,10 @@ function update(delta) {
     delta,
     tanks.nursery,
     fish,
-    (parents) => addJournalEntry(ui, `${parents[0].name} a ${parents[1].name}: ve treci nadrzi se objevily jikry.`),
+    (parents) => {
+      addJournalEntry(ui, `${parents[0].name} a ${parents[1].name}: ve treci nadrzi se objevily jikry.`);
+      completeAction("breed");
+    },
     (babies, parents) => {
       babies.forEach(initializeLifecycle);
       const names = babies.map((baby) => baby.name).join(" a ");
@@ -95,10 +103,16 @@ function update(delta) {
         ? `Z jiker ryb ${parents[0].name} a ${parents[1].name} se vylihl poter: ${names}.`
         : `Ze zakoupenych jiker se vylihl poter: ${names}.`;
       addJournalEntry(ui, message);
-    }
+      const anomalyEntry = eldritchJournalEntry(babies);
+      if (anomalyEntry) addJournalEntry(ui, anomalyEntry);
+    },
+    { minute: gameClock.minute, waterQuality: tanks.nursery.waterQuality, debug: debugMode }
   );
   updateLiveSales(delta, tanks.sale, fish, economy, (item, price) => {
     addJournalEntry(ui, `Zakaznik koupil rybu ${item.name} za ${price} penez.`);
+    completeAction("sell");
+    const contractReward = recordContractSale(item, economy);
+    if (contractReward) addJournalEntry(ui, `Zakazka splnena. Bonus ${contractReward} penez a nova zakazka je pripravena.`);
     if (selectedFish?.id === item.id) { selectedFish = null; clearFishCard(ui); }
   });
 
@@ -106,7 +120,8 @@ function update(delta) {
     item.phase += delta * 3;
     updateLifecycle(item, delta, (text) => addJournalEntry(ui, `Den ${Math.floor(item.ageDays)}: ${text}`));
     const appetite = getAppetiteFactor(item);
-    item.hunger = Math.min(100, item.hunger + delta * 0.85);
+    const hungerRate = item.traits.includes("ciziMetabolismus") ? 0.5 : 0.85;
+    item.hunger = Math.min(100, item.hunger + delta * hungerRate);
     applyTankEffects(item, delta, tanks[item.tank]);
     updateDiseases(item, delta, tanks, (text) => addLog(ui, text));
     updateTroubleEffects(item);
@@ -165,7 +180,9 @@ function draw() {
   ui.gameTime.textContent = formatGameTime();
   ui.waterQuality.textContent = t("ui.water", { quality: describeWater(tanks[currentTank]).toLowerCase() });
   ui.coinCount.textContent = t("ui.coins", { coins: economy.coins });
+  document.getElementById("foodDoseCount").textContent = `${supplyCount("food")} davek`;
   ui.currentTask.textContent = taskText();
+  ui.customerContract.textContent = contractText(ensureContract(economy));
 }
 
 function selectFish(item) {
@@ -201,6 +218,13 @@ function buySnail() {
   tanks[currentTank].snails = (tanks[currentTank].snails ?? 0) + 1;
   document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
   addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} pribyla ampularie. Pomalu cisti rasy ze skla.`);
+}
+
+function buyFood() {
+  if (!spendForAction("foodPack")) return;
+  addSupply("food", 12);
+  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  addJournalEntry(ui, "Koupena nova krabicka vlocek: 12 davek.");
 }
 
 function buyEggs() {
@@ -347,6 +371,7 @@ window.addEventListener("keydown", (event) => {
 
 document.getElementById("journalCloseButton").addEventListener("click", closeJournal);
 document.getElementById("shopCloseButton").addEventListener("click", closeShop);
+document.getElementById("buyFoodButton").addEventListener("click", buyFood);
 document.getElementById("buySnailButton").addEventListener("click", buySnail);
 document.getElementById("buyEggsButton").addEventListener("click", buyEggs);
 document.getElementById("fishCardCloseButton").addEventListener("click", deselectFish);
@@ -433,7 +458,12 @@ function setHeldItem(action) {
 
 function useHeldItem(x, y) {
   if (heldItem === "feed") {
-    if (!spendForAction("feed")) return;
+    if (!consumeSupply("food")) {
+      addJournalEntry(ui, "Vlocky dosly. Novou krabicku koupis v obchode.");
+      openShop();
+      setHeldItem(null);
+      return;
+    }
     addFoodAt(x, y);
     addLog(ui, "Vlocky padaji do vody.");
     if (currentTank === "main") exposeTankToTrouble("food", fish, currentTank, (text) => addLog(ui, text));
@@ -477,7 +507,7 @@ function spendForAction(action) {
 }
 
 function completeAction(action) {
-  recordAction(action, (task) => addJournalEntry(ui, t("event.tutorial_complete", { task: task.label })));
+  recordAction(action, (task) => addJournalEntry(ui, t("event.task_complete", { task: task.label, reward: task.reward ?? 0 })));
 }
 
 function restoreSavedGame() {

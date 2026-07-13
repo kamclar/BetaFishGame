@@ -1212,6 +1212,7 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
 .shop-product strong, .shop-product small { display: block; font-family: Consolas, monospace; }
 .shop-product small { margin-top: 3px; color: #8facaa; font-size: 10px; }
 .shop-product b { color: #d4b45f; font: 900 11px Consolas, monospace; }
+.shelf-item .supply-count, #foodDoseCount { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
 .egg-icon { display: grid; place-items: center; width: 46px; height: 42px; color: #e8e3bc; font: 900 22px Consolas, monospace; border: 2px solid #667f76; background: #18302e; }
 
 .held-cursor.scrape { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; transform-origin: 0 0; }

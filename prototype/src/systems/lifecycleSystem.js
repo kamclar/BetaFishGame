@@ -1,46 +1,9 @@
-export const lifeStages = {
-  fry: {
-    name: "poter",
-    minDays: 0,
-    scale: 0.42,
-    speed: 0.7,
-    canBreed: false,
-  },
-  juvenile: {
-    name: "mlada ryba",
-    minDays: 7,
-    scale: 0.68,
-    speed: 0.9,
-    canBreed: false,
-  },
-  youngAdult: {
-    name: "dorustajici",
-    minDays: 18,
-    scale: 0.88,
-    speed: 1,
-    canBreed: false,
-  },
-  adult: {
-    name: "dospela",
-    minDays: 30,
-    scale: 1,
-    speed: 1,
-    canBreed: true,
-  },
-  old: {
-    name: "starsi ryba",
-    minDays: 120,
-    scale: 0.96,
-    speed: 0.86,
-    canBreed: false,
-  },
-};
+import { gameDaysElapsed } from "./timeSystem.js";
+import { lifeStageOrder, lifeStages } from "../config/fishConfig.js";
 
-const stageOrder = ["fry", "juvenile", "youngAdult", "adult", "old"];
-const secondsPerLifeDay = new URLSearchParams(location.search).has("debugTime") ? 18 : 86400;
-
+export { lifeStages } from "../config/fishConfig.js";
 export function updateLifecycle(item, delta, addLog) {
-  item.ageDays += delta / secondsPerLifeDay;
+  item.ageDays += gameDaysElapsed(delta);
   const previousStage = item.lifeStage;
   const stage = getLifeStage(item.ageDays);
   item.lifeStage = stage.id;
@@ -67,7 +30,7 @@ export function initializeLifecycle(item) {
 
 export function getLifeStage(ageDays) {
   let current = "fry";
-  for (const stageId of stageOrder) {
+  for (const stageId of lifeStageOrder) {
     if (ageDays >= lifeStages[stageId].minDays) current = stageId;
   }
   return { id: current, ...lifeStages[current] };

@@ -44,9 +44,17 @@ export function createPlant(type, x, height, sway = 0) {
   return {
     type,
     x,
+    // h je cilova vyska dospele rostliny; growthStage urcuje aktualni velikost.
     h: height,
     sway,
     age: 0,
+    growthStage: 0.08 + Math.random() * 0.08,
     condition: definition.hardiness,
   };
+}
+
+export function plantGrowthScale(plant) {
+  const stage = Math.max(0, Math.min(1, plant.growthStage ?? Math.min(1, 0.16 + (plant.age ?? 0) * 0.012)));
+  const eased = stage * stage * (3 - 2 * stage);
+  return 0.3 + eased * 0.7;
 }

@@ -1,0 +1,18 @@
+export const breedingConfig = {
+  babyNames: ["Jiskricka", "Perlicka", "Kapka", "Stinek", "Supinka", "Vlnka"],
+  inheritableColors: ["blue", "amber", "violet", "pale", "black", "coral", "ruby", "emerald", "gold", "cobalt", "magenta", "turquoise"],
+  courtshipDays: 0.25,
+  incubationDays: 2,
+  cooldownDays: 3,
+  clutchMin: 1,
+  clutchMax: 2,
+  minimumHealth: 72,
+  maximumStress: 45,
+  colorMutationChance: 0.06,
+  rareChancePurebred: 0.12,
+  rareChanceHybrid: 0.22,
+  mysteryRareChance: 0.18,
+  babyHunger: 24,
+  babyStress: 8,
+  babySize: 1.65,
+};

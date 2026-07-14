@@ -1,10 +1,11 @@
-const rarityValue = { Common: 8, Uncommon: 15, Rare: 28, Exotic: 52, Mythic: 95, Eldritch: 170 };
+import { customerCount } from "../data/customerData.js";
+import { salesConfig } from "../config/salesConfig.js";
 
 export function fishValue(item) {
-  const base = rarityValue[item.rarity] ?? 8;
-  const healthFactor = 0.45 + (item.visibleHealth ?? item.health) / 100 * 0.55;
-  const ageFactor = item.lifeStage === "adult" ? 1.25 : item.lifeStage === "youngAdult" ? 1 : 0.65;
-  return Math.max(3, Math.round(base * healthFactor * ageFactor + item.traits.length * 2 + (item.parents?.length ? 4 : 0)));
+  const base = salesConfig.rarityValue[item.rarity] ?? salesConfig.rarityValue.Common;
+  const healthFactor = salesConfig.healthValueMin + (item.visibleHealth ?? item.health) / 100 * salesConfig.healthValueRange;
+  const ageFactor = salesConfig.ageValue[item.lifeStage] ?? salesConfig.ageValue.other;
+  return Math.max(salesConfig.minimumPrice, Math.round(base * healthFactor * ageFactor + item.traits.length * salesConfig.traitValue + (item.parents?.length ? salesConfig.pedigreeValue : 0)));
 }
 
 export function prepareForSale(item) {
@@ -34,6 +35,13 @@ export function startLiveSales(tank) {
   tank.sales = { active: true, spawnTimer: 0, visitors: [], effects: [], nextId: 1 };
 }
 
+function chooseCustomerType(visitors) {
+  const activeTypes = new Set(visitors.map((visitor) => visitor.type));
+  const availableTypes = Array.from({ length: customerCount }, (_, type) => type)
+    .filter((type) => !activeTypes.has(type));
+  return availableTypes[Math.floor(Math.random() * availableTypes.length)] ?? 0;
+}
+
 export function updateLiveSales(delta, tank, fish, economy, onSale) {
   const sales = tank.sales;
   if (!sales?.active) return;
@@ -43,16 +51,16 @@ export function updateLiveSales(delta, tank, fish, economy, onSale) {
     if (effect.timer <= 0) sales.effects.splice(sales.effects.indexOf(effect), 1);
   }
   sales.spawnTimer -= delta;
-  if (sales.spawnTimer <= 0 && sales.visitors.length < 3) {
+  if (sales.spawnTimer <= 0 && sales.visitors.length < salesConfig.visitor.maxActive) {
     const id = sales.nextId++;
     const fromLeft = id % 2 === 1;
     const slots = [0.18, 0.5, 0.82];
-    sales.visitors.push({ id, type: Math.floor(Math.random() * 4), x: fromLeft ? -0.18 : 1.18, targetX: slots[id % slots.length], exitX: fromLeft ? -0.22 : 1.22, timer: debug ? 7 : 24, state: "arriving" });
-    sales.spawnTimer = debug ? 6 : 35;
+    sales.visitors.push({ id, type: chooseCustomerType(sales.visitors), x: fromLeft ? -0.18 : 1.18, targetX: slots[id % slots.length], exitX: fromLeft ? -0.22 : 1.22, timer: debug ? salesConfig.visitor.debugStay : salesConfig.visitor.normalStay, state: "arriving" });
+    sales.spawnTimer = debug ? salesConfig.visitor.debugInterval : salesConfig.visitor.normalInterval;
   }
   for (const visitor of [...sales.visitors]) {
     const destination = visitor.state === "leaving" ? visitor.exitX : visitor.targetX;
-    visitor.x += (destination - visitor.x) * delta * (visitor.state === "leaving" ? 0.16 : 0.34);
+    visitor.x += (destination - visitor.x) * delta * (visitor.state === "leaving" ? salesConfig.visitor.leavingSpeed : salesConfig.visitor.arrivingSpeed);
     if (visitor.state === "leaving") {
       if (Math.abs(visitor.x - visitor.exitX) < 0.025) sales.visitors.splice(sales.visitors.indexOf(visitor), 1);
       continue;
@@ -95,7 +103,7 @@ export function updateLiveSales(delta, tank, fish, economy, onSale) {
 }
 
 function customerScore(item, type) {
-  const rarity = rarityValue[item.rarity] ?? 8;
+  const rarity = salesConfig.rarityValue[item.rarity] ?? salesConfig.rarityValue.Common;
   const illnessPenalty = item.diseases?.length ? 300 : item.symptoms?.length ? 95 : 0;
   if (type === 0) return 100 - (item.salePrice ?? 10) + item.traits.length * 4 - illnessPenalty;
   if (type === 1) return item.health + item.traits.length * 8 - illnessPenalty;
@@ -104,10 +112,10 @@ function customerScore(item, type) {
 }
 
 function purchaseChance(item) {
-  if (item.diseases?.length) return 0.015;
-  if (item.symptoms?.length) return 0.08;
+  if (item.diseases?.length) return salesConfig.purchaseChance.diseased;
+  if (item.symptoms?.length) return salesConfig.purchaseChance.symptomatic;
   const health = item.visibleHealth ?? item.health ?? 100;
-  if (health < 40) return 0.12;
-  if (health < 65) return 0.34;
-  return 0.72;
+  if (health < 40) return salesConfig.purchaseChance.weak;
+  if (health < 65) return salesConfig.purchaseChance.reduced;
+  return salesConfig.purchaseChance.healthy;
 }

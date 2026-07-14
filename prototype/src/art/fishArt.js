@@ -28,6 +28,9 @@ export function drawFish(ctx, item, options) {
     drawPixelFins(ctx, colors, activeSymptoms);
     drawHealthOverlays(ctx, item, activeSymptoms);
   }
+  if (spriteDrawn && !item.specialSprite && (item.eldritchStage ?? 0) >= 4) {
+    drawCombinedEldritchFeatures(ctx, item, colors);
+  }
 
   if (selectedFish && selectedFish.id === item.id) {
     const glow = ctx.createRadialGradient(0, 0, 8, 0, 0, 50);
@@ -47,6 +50,52 @@ export function drawFish(ctx, item, options) {
   }
 
   ctx.restore();
+}
+
+function drawCombinedEldritchFeatures(ctx, item, colors) {
+  const twitch = Math.round(Math.sin(item.phase * 1.7) * 2);
+  const blink = Math.sin(item.phase * 0.43) > 0.92;
+
+  // Zlute hlavni oko sedi v puvodnim ocnim dulku diamantoveho tela.
+  ctx.fillStyle = colors[1];
+  ctx.fillRect(14, -4, 8, 8);
+  ctx.fillStyle = "#e1aa2f";
+  ctx.fillRect(15, -3, 6, 6);
+  ctx.fillStyle = "#160d20";
+  ctx.fillRect(18, -2, 3, 4);
+  ctx.fillStyle = "#fff0a0";
+  ctx.fillRect(18, -2, 1, 1);
+
+  // Dve mensi oci jsou pod hlavnim okem, ne pred tlamou.
+  ctx.fillStyle = colors[1];
+  ctx.fillRect(12, 5, 6, blink ? 2 : 5);
+  ctx.fillRect(17, 9, 5, blink ? 2 : 4);
+  if (!blink) {
+    ctx.fillStyle = "#e1aa2f";
+    ctx.fillRect(13, 6, 4, 3);
+    ctx.fillRect(18, 10, 3, 2);
+    ctx.fillStyle = "#12091d";
+    ctx.fillRect(15, 6, 2, 2);
+    ctx.fillRect(20, 10, 1, 1);
+  }
+
+  // Kratke ustni vyrustky zustavaji soucasti kombinovane anatomie, ne celeho spritu.
+  ctx.fillStyle = colors[1];
+  ctx.fillRect(20, 1, 6, 3);
+  ctx.fillRect(24, 3, 3, 5 + Math.max(0, twitch));
+  ctx.fillRect(26, 7 + twitch, 6, 2);
+  ctx.fillRect(20, 5, 5, 2);
+  ctx.fillRect(23, 6, 2, 6 - Math.min(0, twitch));
+  ctx.fillRect(24, 11 - twitch, 7, 2);
+  ctx.fillStyle = colors[2];
+  ctx.fillRect(29, 7 + twitch, 3, 1);
+  ctx.fillRect(28, 11 - twitch, 3, 1);
+
+  // Studene body pod kuzi pomahaji znaky precist i pri malem meritku.
+  ctx.fillStyle = "#78d6c1";
+  ctx.fillRect(-11, -6, 3, 3);
+  ctx.fillRect(-2, 7, 2, 2);
+  ctx.fillRect(8, -10, 2, 2);
 }
 
 function drawTail(ctx, type, colors, wave, activeSymptoms) {

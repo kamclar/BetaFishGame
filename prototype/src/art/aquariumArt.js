@@ -1,5 +1,7 @@
-import { plantTypes } from "../data/plantData.js";
+import { plantGrowthScale, plantTypes } from "../data/plantData.js";
+import { customerCount } from "../data/customerData.js";
 import { snailPosition } from "../systems/tankSystem.js";
+import { dayNightConfig } from "../config/behaviorConfig.js";
 
 const decorFiles = {
   vallisneria: "plant_vallisneria.png",
@@ -19,16 +21,21 @@ const nurseryBottomImage = new Image();
 nurseryBottomImage.src = "./assets/decor/nursery_bottom.png";
 const snailImage = new Image();
 snailImage.src = "./assets/creatures/ampullaria.png";
+const filterImages = [null, new Image(), new Image()];
+filterImages[1].src = "./assets/equipment/filter_1.png";
+filterImages[2].src = "./assets/equipment/filter_2.png";
 const customerEyePositions = [];
+const customerOriginalImages = [];
 const fallbackCustomerEyes = [
   [[53, 71], [82, 69]],
   [[52, 50], [76, 50]],
   [[50, 54], [72, 51]],
   [[50, 60], [71, 57]],
 ];
-const customerImages = Array.from({ length: 4 }, (_, index) => {
+const customerImages = Array.from({ length: customerCount }, (_, index) => {
   const image = new Image();
   const original = new Image();
+  customerOriginalImages[index] = original;
   const updateEyePositions = () => {
     if (!image.complete || !image.naturalWidth || !original.complete || !original.naturalWidth) return;
     customerEyePositions[index] = findEyeHoles(image, original) ?? fallbackCustomerEyes[index];
@@ -97,6 +104,7 @@ export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   ctx.rect(glass.left, surfaceY - 4, glass.width, view.height - surfaceY - 16);
   ctx.clip();
   drawWater(ctx, view, tankId);
+  drawTankFilter(ctx, view, tank);
   drawPlants(ctx, view, plants);
   if (tankId === "nursery" && tank?.spawning?.eggs) drawEggClutch(ctx, view, tank.spawning.eggs);
   drawTankDirt(ctx, view, tank);
@@ -105,11 +113,70 @@ export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   ctx.restore();
 }
 
+export function drawDayNightOverlay(ctx, view, lightLevel, period) {
+  const darkness = Math.max(0, Math.min(dayNightConfig.nightOverlayMax, (1 - lightLevel) * dayNightConfig.nightOverlayMax));
+  if (darkness > 0.01) {
+    const gradient = ctx.createLinearGradient(0, getSurfaceY(view), 0, view.height);
+    gradient.addColorStop(0, `rgba(13, 25, 57, ${darkness * 0.72})`);
+    gradient.addColorStop(1, `rgba(4, 10, 29, ${darkness})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, getSurfaceY(view) - 5, view.width, view.height - getSurfaceY(view) + 5);
+  }
+  if (period === "svitani" || period === "soumrak") {
+    const glow = ctx.createLinearGradient(0, getSurfaceY(view), view.width, getSurfaceY(view));
+    glow.addColorStop(0, "rgba(222, 153, 84, 0)");
+    glow.addColorStop(0.5, "rgba(222, 153, 84, 0.11)");
+    glow.addColorStop(1, "rgba(222, 153, 84, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, getSurfaceY(view), view.width, view.height - getSurfaceY(view));
+  }
+}
+
+function drawTankFilter(ctx, view, tank) {
+  const level = Math.max(0, Math.min(2, tank?.filterLevel ?? 1));
+  const image = filterImages[level];
+  if (!image?.complete || image.naturalWidth === 0) return;
+  const glass = getGlassBounds(view);
+  const size = level >= 2 ? 96 : 76;
+  const x = glass.right - size - 34;
+  const y = view.height - 46 - size;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, x, y, size, size);
+  const time = performance.now() / (level >= 2 ? 620 : 850);
+  ctx.strokeStyle = "rgba(190, 236, 239, 0.52)";
+  for (let bubble = 0; bubble < level + 2; bubble += 1) {
+    const rise = (time * (13 + bubble * 3) + bubble * 19) % 78;
+    const bx = x + size * 0.52 + Math.sin(time + bubble * 2.1) * 5;
+    const by = y + size * 0.22 - rise;
+    ctx.beginPath(); ctx.arc(bx, by, 2 + bubble % 2, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (tank?.aerator) {
+    const stoneX = x - 34;
+    ctx.fillStyle = "#26383b";
+    ctx.fillRect(stoneX - 12, y + size - 9, 25, 7);
+    ctx.strokeStyle = "rgba(190, 236, 239, 0.65)";
+    for (let bubble = 0; bubble < 6; bubble += 1) {
+      const rise = (time * (22 + bubble * 2) + bubble * 17) % 105;
+      const bx = stoneX + Math.sin(time * 1.4 + bubble) * 9;
+      const by = y + size - 12 - rise;
+      ctx.beginPath(); ctx.arc(bx, by, 1.5 + bubble % 2, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+}
+
 function drawCustomers(ctx, view, tank) {
   const visitors = tank?.sales?.visitors ?? [];
+  const glass = getGlassBounds(view);
+  const innerLeft = glass.left + glass.wall + 1;
+  const innerRight = glass.right - glass.wall - 1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(innerLeft, 0, innerRight - innerLeft, view.height - 20);
+  ctx.clip();
   for (const visitor of visitors) {
     const image = customerImages[visitor.type];
-    if (!image?.complete || image.naturalWidth === 0) continue;
+    const original = customerOriginalImages[visitor.type];
+    if (!original?.complete || original.naturalWidth === 0) continue;
     const x = visitor.x * view.width;
     const width = 320;
     const height = 400;
@@ -119,11 +186,18 @@ function drawCustomers(ctx, view, tank) {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
     ctx.imageSmoothingEnabled = false;
-    // 1) bile pozadi, 2) zornice, 3) maskovany sprite postavy navrchu.
-    drawCustomerEyes(ctx, visitor, x, top, width, height);
-    ctx.drawImage(image, x - width / 2, top, width, height);
+    const eyeMaskReady = image?.complete && image.naturalWidth > 0 && customerEyePositions[visitor.type]?.length === 2;
+    if (eyeMaskReady) {
+      // 1) bile pozadi, 2) zornice, 3) maskovany sprite postavy navrchu.
+      drawCustomerEyes(ctx, visitor, x, top, width, height);
+      ctx.drawImage(image, x - width / 2, top, width, height);
+    } else {
+      // Nova postava funguje i predtim, nez pro ni vznikne rucne upravena maska oci.
+      ctx.drawImage(original, x - width / 2, top, width, height);
+    }
     ctx.restore();
   }
+  ctx.restore();
 }
 
 function drawCustomerEyes(ctx, visitor, centerX, top, width, height) {
@@ -321,6 +395,13 @@ export function drawLiquidClouds(ctx, liquidClouds) {
     ctx.beginPath();
     ctx.arc(cloud.x, cloud.y, radius, 0, Math.PI * 2);
     ctx.fill();
+    if (cloud.sediment) {
+      ctx.fillStyle = `rgba(91, 57, 29, ${alpha * 1.8})`;
+      for (let speck = 0; speck < 5; speck += 1) {
+        const angle = speck * 2.17 + cloud.x * 0.03;
+        ctx.fillRect(Math.round(cloud.x + Math.cos(angle) * radius * 0.55), Math.round(cloud.y + Math.sin(angle) * radius * 0.35), 2, 2);
+      }
+    }
   }
 }
 
@@ -346,6 +427,16 @@ export function drawGlass(ctx, view) {
   ctx.strokeStyle = "rgba(226, 252, 246, 0.65)";
   ctx.lineWidth = 11;
   ctx.stroke();
+}
+
+export function maskAquariumEdges(ctx, view) {
+  const glass = getGlassBounds(view);
+  const innerLeft = glass.left + glass.wall + 1;
+  const innerRight = glass.right - glass.wall - 1;
+  // Posledni nepruhledna hranicni maska odstrani cokoli, co se vykreslilo
+  // mimo vnitrni sklo. Ram se kresli az potom a prekryje cisty rez.
+  ctx.clearRect(0, 0, innerLeft, view.height);
+  ctx.clearRect(innerRight, 0, Math.max(0, view.width - innerRight), view.height);
 }
 
 export function getSurfaceY(view) {
@@ -439,23 +530,25 @@ function drawPlants(ctx, view, plants) {
   for (const plant of plants) {
     const baseY = view.height - 46;
     const type = plantTypes[plant.type] ?? plantTypes.vallisneria;
+    const growthScale = plantGrowthScale(plant);
+    const currentHeight = plant.h * growthScale;
     const sprite = decorImages.get(plant.type);
     if (sprite?.complete && sprite.naturalWidth > 0) {
-      const scale = plant.h / 160;
+      const scale = currentHeight / 160;
       const width = 96 * scale;
       const sway = Math.sin(performance.now() / 1500 + plant.sway) * 0.025;
       ctx.save();
       ctx.translate(plant.x, baseY);
       ctx.rotate(sway);
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(sprite, -width / 2, -plant.h, width, plant.h);
+      ctx.drawImage(sprite, -width / 2, -currentHeight, width, currentHeight);
       ctx.restore();
       continue;
     }
-    const topY = Math.max(surfaceY + 18, baseY - plant.h);
+    const topY = Math.max(surfaceY + 18, baseY - currentHeight);
     const time = performance.now() / 1400 + plant.sway;
     if (type.shape === "ribbon") drawRibbonPlant(ctx, plant.x, baseY, topY, time, type.colors);
-    if (type.shape === "broad") drawBroadPlant(ctx, plant.x, baseY, plant.h, time, type.colors);
+    if (type.shape === "broad") drawBroadPlant(ctx, plant.x, baseY, currentHeight, time, type.colors);
     if (type.shape === "stem") drawStemPlant(ctx, plant.x, baseY, topY, time, type.colors);
     if (type.shape === "fern") drawFernPlant(ctx, plant.x, baseY, topY, time, type.colors);
   }

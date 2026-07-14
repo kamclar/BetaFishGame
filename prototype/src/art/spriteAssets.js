@@ -46,12 +46,13 @@ export function drawFishSprites(ctx, item, options) {
   const tail = tailAnatomy[item.tail] ?? tailAnatomy.short;
   const dorsalFin = dorsalFinAnatomy[item.dorsalFin ?? finsKey] ?? dorsalFinAnatomy.normal;
   const ventralFin = ventralFinAnatomy[item.ventralFin ?? finsKey] ?? ventralFinAnatomy.normal;
+  const advancedEldritch = (item.eldritchStage ?? 0) >= 4;
   const colors = options.palette[item.color];
-  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tail.scale * body.partScales.tail, colors)) return false;
+  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tail.scale * body.partScales.tail * (advancedEldritch ? 1.28 : 1), colors)) return false;
   // Attachment roots belong behind the body. Drawing the body last hides the
   // hard socket edges and makes the independently animated parts read as one fish.
-  if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, body.anchors.dorsal, dorsalFin.socket, dorsalFin.scale * body.partScales.dorsal, colors)) return false;
-  if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, body.anchors.ventral, ventralFin.socket, ventralFin.scale * body.partScales.ventral, colors)) return false;
+  if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, body.anchors.dorsal, dorsalFin.socket, dorsalFin.scale * body.partScales.dorsal * (advancedEldritch ? 1.18 : 1), colors)) return false;
+  if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, body.anchors.ventral, ventralFin.socket, ventralFin.scale * body.partScales.ventral * (advancedEldritch ? 1.75 : 1), colors)) return false;
   if (!drawAttachedPart(ctx, body.file, "base", 0, [0, 0], [0, 0], body.scale, colors)) return false;
 
   const overlays = [

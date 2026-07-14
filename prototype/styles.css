@@ -132,22 +132,46 @@ body:hover .desktop-titlebar {
 }
 
 .held-cursor.feed::before {
-  background: linear-gradient(#503a28 30%, #c79647 31% 70%, #3b2b22 71%);
+  background: url("./assets/items/item_flakes.png") center / contain no-repeat;
 }
 
 .held-cursor.test::before {
-  background: linear-gradient(#253034 35%, #9467b8 36%);
-  border: 1px solid #bfa6d9;
+  background: url("./assets/items/item_test_kit.png") center / contain no-repeat;
 }
 
 .held-cursor.plant::before {
-  background: linear-gradient(#253034 30%, #406d48 31%);
-  border: 1px solid #76b878;
+  background: url("./assets/items/item_plant.png") center / contain no-repeat;
 }
 
 .held-cursor.medicine::before {
-  background: linear-gradient(#253034 28%, #8e3545 29% 70%, #dca0aa 71%);
-  border: 1px solid #dca0aa;
+  background: url("./assets/items/item_medicine.png") center / contain no-repeat;
+}
+
+.held-cursor.feed,
+.held-cursor.test,
+.held-cursor.plant,
+.held-cursor.medicine {
+  width: 1px;
+  height: 1px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.held-cursor.feed::before,
+.held-cursor.test::before,
+.held-cursor.plant::before,
+.held-cursor.medicine::before {
+  left: -18px;
+  top: -38px;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 0;
+  image-rendering: pixelated;
+  filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .55));
 }
 
 .app-shell {
@@ -339,6 +363,33 @@ body:hover .desktop-tank-mode .drag-handle {
   border-bottom: 1px solid rgba(100, 65, 25, 0.2);
   color: #7a5030;
 }
+
+.fish-card-tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 10px 8px; border: 2px solid #29444b; }
+.fish-card-tabs button { padding: 6px 3px; border: 0; border-right: 1px solid #29444b; background: #0a171b; color: #789793; font: 800 10px Consolas, monospace; cursor: pointer; }
+.fish-card-tabs button:last-child { border-right: 0; }
+.fish-card-tabs button.active { background: #315158; color: #fff0bd; }
+.fish-card [data-card-page] { display: none; }
+.fish-card[data-page="overview"] [data-card-page="overview"] { display: grid; }
+.fish-card[data-page="overview"] .trait-list[data-card-page="overview"],
+.fish-card[data-page="overview"] .symptom-list[data-card-page="overview"],
+.fish-card[data-page="overview"] .fish-history[data-card-page="overview"] { display: block; }
+.fish-card[data-page="pedigree"] [data-card-page="pedigree"],
+.fish-card[data-page="atlas"] [data-card-page="atlas"] { display: block; }
+.pedigree-page, .atlas-page { margin: 0 10px 10px; padding: 8px; max-height: calc(100vh - 330px); overflow-y: auto; border: 2px solid #29444b; background: #0a171b; text-align: left; }
+.pedigree-page section, .atlas-page section { margin-bottom: 10px; }
+.pedigree-page h3, .atlas-page h3 { margin: 0 0 5px; color: #9ad8ca; font: 900 11px Consolas, monospace; }
+.atlas-page h3 small { color: #d4b45f; }
+.relative-list { display: grid; gap: 4px; color: #718b87; font: 10px Consolas, monospace; }
+.relative-list button { padding: 6px; border: 2px solid #42635e; background: #193036; color: #dce9df; text-align: left; cursor: pointer; }
+.pedigree-page dl { margin: 0; }
+.pedigree-page dl div { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-bottom: 1px solid #20363c; font: 10px Consolas, monospace; }
+.pedigree-page dt { color: #6e9995; }.pedigree-page dd { margin: 0; color: #dce9df; }
+.hidden-genes b { font-weight: 900; color: #d4b45f; }
+.hidden-genes b.unknown { color: #536866; letter-spacing: .4px; }
+.hidden-genes b.revealed::after { content: " odhalen"; margin-left: 3px; color: #78b99a; font-size: 8px; text-transform: uppercase; }
+.atlas-entries { display: flex; flex-wrap: wrap; gap: 4px; }
+.atlas-entries span { padding: 3px 5px; border: 1px solid #42635e; color: #dce9df; font: 9px Consolas, monospace; }
+.atlas-entries span.unknown { border-color: #28383b; color: #4e6260; background: #101b1e; }
 
 .desktop-tank-mode .fish-data {
   grid-template-columns: 1fr;
@@ -555,7 +606,7 @@ h2 {
   border-radius: 0;
   background: transparent;
   image-rendering: pixelated;
-  cursor: crosshair;
+  cursor: pointer;
   box-shadow: none;
 }
 
@@ -929,11 +980,131 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
   font-size: 11px;
 }
 
-.desktop-tank-mode .side-panel {
-  top: 112px;
-  width: 292px;
-  max-height: calc(100vh - 206px);
+/* Zasouvaci horni panel. Akvarium zustava v klidu otevrene az k horni hrane. */
+.desktop-tank-mode .top-bar {
+  transform: translateY(calc(-100% - 42px));
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(.2, .75, .25, 1), opacity 140ms ease, visibility 0s linear 220ms;
 }
+
+body:hover .desktop-tank-mode .top-bar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.desktop-tank-mode.hud-open .top-bar,
+body:hover .desktop-tank-mode.hud-open .top-bar {
+  transform: translateY(0);
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.hud-toggle {
+  position: absolute;
+  z-index: 10;
+  top: 35px;
+  right: 18px;
+  width: 31px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #29434b;
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+  background: rgba(8, 17, 21, .82);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .42);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: top 220ms cubic-bezier(.2, .75, .25, 1), background 120ms ease;
+}
+
+.hud-toggle::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #d4b45f;
+}
+
+.hud-toggle:hover,
+.hud-toggle:focus-visible { background: #162a30; outline: none; }
+
+.desktop-tank-mode.hud-open .hud-toggle { top: 120px; }
+.desktop-tank-mode.hud-open .hud-toggle::before {
+  border-top: 0;
+  border-bottom: 5px solid #d4b45f;
+}
+
+.desktop-tank-mode .side-panel { transition: top 220ms ease; }
+.desktop-tank-mode:not(.hud-open) .side-panel { top: 42px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tutorial-panel {
+  position: absolute;
+  z-index: 16;
+  left: 18px;
+  bottom: 96px;
+  width: min(360px, calc(100vw - 36px));
+  padding: 14px 15px 13px;
+  border: 3px solid #20383f;
+  border-bottom-color: #091217;
+  border-radius: 2px;
+  background: #0c191d;
+  box-shadow: inset 0 0 0 2px #42646a, 5px 5px 0 rgba(0, 0, 0, .58);
+  color: #c7d6d1;
+}
+
+.tutorial-panel[hidden] { display: none; }
+.tutorial-panel h2 { margin: 3px 78px 7px 0; color: #f0ddb0; font: 700 18px/1.15 Georgia, serif; }
+.tutorial-panel > p:not(.tutorial-progress) { margin: 0 0 11px; font: 12px/1.5 "Segoe UI", sans-serif; }
+.tutorial-progress { margin: 0; color: #72b8af; font: 800 9px/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.tutorial-skip { position: absolute; top: 9px; right: 10px; padding: 4px 6px; border: 0; background: transparent; color: #738b89; font: 9px Consolas, monospace; cursor: pointer; }
+.tutorial-skip:hover { color: #d5e1dc; }
+.tutorial-continue { min-width: 92px; padding: 7px 12px; border: 2px solid #6e5930; border-bottom-color: #2c200e; background: #b49349; color: #1b160b; font: 900 11px Consolas, monospace; cursor: pointer; }
+.tutorial-continue:hover { background: #d2b361; }
+
+.tutorial-focus {
+  position: relative;
+  z-index: 15 !important;
+  outline: 3px solid #e0c36b !important;
+  outline-offset: 3px;
+  animation: tutorial-pulse 1.1s steps(2, end) infinite;
+}
+
+@keyframes tutorial-pulse {
+  50% { outline-color: #75cfc0; filter: brightness(1.14); }
+}
+
+.desktop-tank-mode .side-panel {
+  top: 96px;
+  width: 292px;
+  max-height: calc(100vh - 190px);
+  padding: 4px 7px 12px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #5c7778 #091519;
+}
+
+.desktop-tank-mode .side-panel::-webkit-scrollbar { width: 8px; }
+.desktop-tank-mode .side-panel::-webkit-scrollbar-track { background: #091519; }
+.desktop-tank-mode .side-panel::-webkit-scrollbar-thumb { border: 2px solid #091519; background: #5c7778; }
 
 .desktop-tank-mode .fish-card {
   border-left: 16px solid #372415;
@@ -1181,6 +1352,12 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
   font-family: Consolas, monospace;
 }
 
+.daily-goals { margin: 8px 12px; padding: 8px; border: 2px solid #38535a; background: #13262b; }
+.daily-goals .eyebrow { padding: 0 0 5px !important; border: 0 !important; background: none !important; }
+.daily-goals ul { margin: 0; padding: 0; list-style: none; }
+.daily-goals li { padding: 4px 3px; color: #b9cbc4; font: 700 10px Consolas, monospace; }
+.daily-goals li.completed { color: #76b99a; text-decoration: line-through; opacity: .78; }
+
 /* Pixel shop */
 .shop-panel {
   position: fixed;
@@ -1202,6 +1379,7 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
   font: 900 12px Consolas, monospace;
 }
 .shop-balance { padding: 8px 14px; border-bottom: 2px solid #29444b; color: #d4b45f; font: 900 12px Consolas, monospace; }
+.shop-skill { padding: 7px 14px; border-bottom: 2px solid #29444b; color: #9ad8ca; font: 800 11px Consolas, monospace; }
 .shop-grid { padding: 12px; }
 .shop-product {
   display: grid; grid-template-columns: 54px 1fr auto; align-items: center; gap: 10px;
@@ -1209,11 +1387,18 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
   background: #172c32; color: #dce9df; text-align: left; cursor: pointer;
 }
 .shop-product:hover { border-color: #d4b45f; background: #254249; }
+.shop-product:disabled { cursor: default; filter: saturate(.4); opacity: .72; }
+.shop-product.locked { border-color: #303f43; background: #111f23; }
+.shop-product.locked strong { color: #788b89; }
 .shop-product strong, .shop-product small { display: block; font-family: Consolas, monospace; }
 .shop-product small { margin-top: 3px; color: #8facaa; font-size: 10px; }
 .shop-product b { color: #d4b45f; font: 900 11px Consolas, monospace; }
 .shelf-item .supply-count, #foodDoseCount { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
 .egg-icon { display: grid; place-items: center; width: 46px; height: 42px; color: #e8e3bc; font: 900 22px Consolas, monospace; border: 2px solid #667f76; background: #18302e; }
+.filter-icon { display: block; width: 46px; height: 42px; overflow: hidden; color: transparent; border: 2px solid #526f73; background: #183034 url("./assets/equipment/filter_2.png") center / contain no-repeat; }
+.heater-icon, .aerator-icon { display: grid; place-items: center; width: 46px; height: 42px; border: 2px solid #526f73; background: #142b30; color: #9ad8ca; font: 900 13px Consolas, monospace; }
+.heater-icon { box-shadow: inset 0 -8px 0 #873e32; color: #ffd49a; }
+.aerator-icon { background: radial-gradient(circle at 30% 65%, transparent 0 4px, #8fcbd2 5px 6px, transparent 7px), radial-gradient(circle at 67% 34%, transparent 0 6px, #8fcbd2 7px 8px, transparent 9px), #142b30; color: transparent; }
 
 .held-cursor.scrape { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; transform-origin: 0 0; }
 .held-cursor.scrape::before {
@@ -1222,14 +1407,16 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
 }
 .held-cursor.clean { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; overflow: visible; transform-origin: 0 0; }
 .held-cursor.clean::before {
-  z-index: 1; left: -11px; top: -44px; width: 22px; height: 41px; border: 0; border-radius: 4px 4px 10px 10px;
+  z-index: 1; left: -13px; top: auto; bottom: 7px; width: 26px; height: var(--siphon-fill, 0px); max-height: 47px; border: 0; border-radius: 5px 5px 9px 9px;
   background:
     radial-gradient(circle at 20% 75%, #c69a5d 0 2px, transparent 3px),
     radial-gradient(circle at 72% 42%, #7b542f 0 2px, transparent 3px),
     radial-gradient(circle at 46% 18%, #b17b42 0 1px, transparent 2px),
     linear-gradient(to top, rgba(91,57,29,.94), rgba(139,96,52,.8) 55%, rgba(104,78,51,.42));
-  opacity: var(--siphon-turbidity, 0);
-  transition: opacity 480ms ease-out;
+  opacity: calc(.35 + var(--siphon-turbidity, 0));
+  box-shadow: inset 0 4px 0 rgba(190, 152, 103, .35);
+  transform-origin: bottom center;
+  transition: height 90ms linear, opacity 260ms ease-out;
 }
 .held-cursor.clean::after {
   content: ""; position: absolute; z-index: 2; left: -31px; top: -76px; width: 62px; height: 78px;
@@ -1242,3 +1429,29 @@ body:hover .desktop-tank-mode .top-bar { opacity: 1; }
   0% { background-position: 0 0, 0 0, 0 0, 0 0; }
   50% { background-position: 4px -5px, -3px -7px, 5px -3px, 0 0; }
 }
+
+/* Story journal and water chemistry */
+#waterReadings { color: #9bc8bd; font-size: 9px; }
+.water-change {
+  background:
+    linear-gradient(to top, rgba(56, 139, 163, .9) 0 52%, transparent 53%),
+    linear-gradient(90deg, transparent 18%, #a9c8c5 19% 28%, transparent 29% 71%, #a9c8c5 72% 81%, transparent 82%);
+  border: 2px solid #739a98;
+  box-shadow: inset 0 -4px 0 rgba(23, 66, 78, .8);
+}
+.journal-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 12px 0; border: 2px solid #38535a; }
+.journal-tabs button { padding: 7px; border: 0; border-right: 1px solid #38535a; background: #0d1c20; color: #799592; font: 900 10px Consolas, monospace; cursor: pointer; }
+.journal-tabs button:last-child { border-right: 0; }
+.journal-tabs button.active { color: #f0ddb0; background: #29474d; }
+.journal-page { display: none; }
+.journal-page.active { display: block; }
+.story-page { max-height: calc(100vh - 250px); padding: 9px 12px 15px; overflow-y: auto; }
+.journal-intro { margin: 0 0 9px; color: #8ca7a1; font: 10px/1.45 Consolas, monospace; }
+.story-chapter { margin-bottom: 10px; padding: 10px; border: 2px solid #3d5757; background: #17272a; box-shadow: inset 0 0 0 2px rgba(214, 190, 132, .04); }
+.story-chapter.unlocked { border-color: #665a3c; background: #25271f; }
+.story-chapter h3 { margin: 0 0 7px; color: #e1c989; font: 900 12px Georgia, serif; }
+.story-chapter p { margin: 0 0 8px; color: #c4cbb7; font: 10px/1.55 Consolas, monospace; }
+.story-chapter .story-date { color: #7c967f; font-size: 8px; text-transform: uppercase; }
+.story-chapter small { display: block; padding-top: 6px; border-top: 1px dashed #566049; color: #93aa86; font: 9px/1.4 Consolas, monospace; }
+.story-chapter.locked { opacity: .62; filter: saturate(.45); }
+.story-chapter.locked h3 { color: #758682; }

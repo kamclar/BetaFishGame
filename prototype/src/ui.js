@@ -1,6 +1,8 @@
 import { diseaseDatabase, symptomDatabase } from "./systems/healthSystem.js";
 import { describeHealth, describeStress, getActiveSymptoms, getDiseaseStage } from "./systems/healthSystem.js";
 import { categoryName } from "./data/speciesData.js";
+import { hiddenGeneRows, inheritedFeatureLabels } from "./systems/lineageSystem.js";
+import { csStoryUi } from "./i18n/csStory.js";
 
 const traitInfo = {
   klidna: ["Klidna", "Pomaleji se stresuje."], skvrnita: ["Skvrnita", "Vyrazny dedicny vzor."],
@@ -29,6 +31,7 @@ const traitInfo = {
   vnitrniZrak: ["Vnitrni zrak", "Slepa linie zacala reagovat drive, nez se podnet objevi."],
   mnohooci: ["Mnohooci", "Drobne oci sleduji ruzne smery nezavisle."],
   volaniHlubin: ["Volani hlubin", "Jeji linie muze ukryvat dalsi neznamy stupen."],
+  krehkaLinie: ["Krehka linie", "Projeveny recesivni znak snizuje dlouhodobou odolnost linie."],
 };
 
 export function createUi() {
@@ -42,6 +45,7 @@ export function createUi() {
     fishRarity: document.getElementById("fishRarity"),
     fishSex: document.getElementById("fishSex"),
     fishCategory: document.getElementById("fishCategory"),
+    fishBehavior: document.getElementById("fishBehavior"),
     fishParents: document.getElementById("fishParents"),
     fishOffspring: document.getElementById("fishOffspring"),
     fishHistory: document.getElementById("fishHistory"),
@@ -60,13 +64,80 @@ export function createUi() {
     gameDay: document.getElementById("gameDay"),
     gameTime: document.getElementById("gameTime"),
     waterQuality: document.getElementById("waterQuality"),
+    waterReadings: document.getElementById("waterReadings"),
     coinCount: document.getElementById("coinCount"),
+    skillStatus: document.getElementById("skillStatus"),
     currentTask: document.getElementById("currentTask"),
     customerContract: document.getElementById("customerContract"),
     journalCount: document.getElementById("journalCount"),
+    dailyGoalList: document.getElementById("dailyGoalList"),
+    fishCard: document.querySelector(".fish-card"),
+    fishPageTabs: [...document.querySelectorAll("[data-fish-page]")],
+    pedigreePage: document.getElementById("pedigreePage"),
+    atlasPage: document.getElementById("atlasPage"),
+    storyChapters: document.getElementById("storyChapters"),
+    journalPageTabs: [...document.querySelectorAll("[data-journal-page]")],
+    journalPages: [...document.querySelectorAll("[data-journal-content]")],
+    tutorialPanel: document.getElementById("tutorialPanel"),
+    tutorialProgress: document.getElementById("tutorialProgress"),
+    tutorialTitle: document.getElementById("tutorialTitle"),
+    tutorialText: document.getElementById("tutorialText"),
+    tutorialContinue: document.getElementById("tutorialContinue"),
+    tutorialSkip: document.getElementById("tutorialSkip"),
   };
   restoreJournal(ui);
   return ui;
+}
+
+export function renderTutorial(ui, step) {
+  document.querySelectorAll(".tutorial-focus").forEach((element) => element.classList.remove("tutorial-focus"));
+  ui.tutorialPanel.hidden = !step;
+  if (!step) return;
+  ui.tutorialProgress.textContent = step.progress;
+  ui.tutorialTitle.textContent = step.title;
+  ui.tutorialText.textContent = step.text;
+  ui.tutorialContinue.textContent = step.button ?? "";
+  ui.tutorialContinue.hidden = !step.button;
+  ui.tutorialSkip.textContent = step.skipLabel;
+  document.querySelector(step.target)?.classList.add("tutorial-focus");
+}
+
+export function setJournalPage(ui, page) {
+  for (const tab of ui.journalPageTabs) tab.classList.toggle("active", tab.dataset.journalPage === page);
+  for (const content of ui.journalPages) content.classList.toggle("active", content.dataset.journalContent === page);
+}
+
+export function renderStoryChapters(ui, chapters) {
+  ui.storyChapters.innerHTML = "";
+  for (const chapter of chapters) {
+    const article = document.createElement("article");
+    article.className = `story-chapter ${chapter.unlocked ? "unlocked" : "locked"}`;
+    if (chapter.unlocked) {
+      const date = document.createElement("p"); date.className = "story-date"; date.textContent = chapter.date;
+      const title = document.createElement("h3"); title.textContent = chapter.title;
+      article.append(date, title);
+      for (const paragraph of chapter.text.split(/\n\s*\n/)) {
+        const text = document.createElement("p"); text.textContent = paragraph; article.appendChild(text);
+      }
+      const hint = document.createElement("small"); hint.textContent = `${csStoryUi.marginNote}: ${chapter.hint}`; article.appendChild(hint);
+    } else {
+      const title = document.createElement("h3"); title.textContent = csStoryUi.missingPage;
+      const hint = document.createElement("p"); hint.textContent = chapter.hint;
+      article.append(title, hint);
+    }
+    ui.storyChapters.appendChild(article);
+  }
+}
+
+export function renderDailyGoals(ui, goals) {
+  if (!ui.dailyGoalList) return;
+  ui.dailyGoalList.innerHTML = "";
+  for (const goal of goals ?? []) {
+    const item = document.createElement("li");
+    item.classList.toggle("completed", Boolean(goal.completed));
+    item.textContent = `${goal.completed ? "✓" : "·"} ${goal.label} ${goal.progress}/${goal.target} · ${goal.reward} penez · +${goal.skillXp ?? goal.reputation ?? 0} zkus.`;
+    ui.dailyGoalList.appendChild(item);
+  }
 }
 
 export function addLog(ui, text) {
@@ -118,6 +189,7 @@ function updateJournalCount(ui) {
 
 export function renderFishCard(ui, item) {
   ui.appShell.classList.add("show-card");
+  setFishCardPage(ui, "overview");
   ui.fishName.textContent = item.name;
   ui.fishSpecies.textContent = item.species;
   ui.fishAge.textContent = item.age;
@@ -125,6 +197,7 @@ export function renderFishCard(ui, item) {
   ui.appShell.dataset.rarity = item.rarity.toLowerCase();
   ui.fishSex.textContent = item.sex ?? "nezname";
   ui.fishCategory.textContent = categoryName(item.category);
+  ui.fishBehavior.textContent = item.behaviorState ?? "pozoruje okoli";
   ui.fishParents.textContent = item.parents?.length ? item.parents.join(", ") : "neznamí";
   ui.fishOffspring.textContent = String(item.offspring?.length ?? 0);
   ui.traitList.innerHTML = "";
@@ -142,6 +215,79 @@ export function renderFishCard(ui, item) {
   refreshFishCard(ui, item);
 }
 
+export function setFishCardPage(ui, page) {
+  ui.fishCard.dataset.page = page;
+  for (const tab of ui.fishPageTabs) tab.classList.toggle("active", tab.dataset.fishPage === page);
+}
+
+export function renderPedigreePage(ui, item, allFish, onSelect, archive = {}) {
+  ui.pedigreePage.innerHTML = "";
+  const addFamily = (title, ids) => {
+    const section = document.createElement("section");
+    section.innerHTML = `<h3>${title}</h3>`;
+    const list = document.createElement("div"); list.className = "relative-list";
+    for (const id of ids ?? []) {
+      const relative = allFish.find((fish) => fish.id === id);
+      const record = archive[id];
+      if (!relative) { const missing = document.createElement("span"); missing.textContent = record ? `${record.name} · ${record.species} (mimo chov)` : "Neznamy"; list.appendChild(missing); continue; }
+      const button = document.createElement("button"); button.type = "button";
+      button.textContent = `${relative.name} · ${relative.species}`;
+      button.addEventListener("click", () => onSelect(relative)); list.appendChild(button);
+    }
+    if (!list.children.length) list.textContent = "Bez zaznamu.";
+    section.appendChild(list); ui.pedigreePage.appendChild(section);
+  };
+  addFamily("Rodice", item.parents);
+  addFamily("Potomci", item.offspring);
+  const health = item.geneticHealth;
+  if (health) {
+    const geneticHealth = document.createElement("section");
+    geneticHealth.innerHTML = `<h3>Geneticke zdravi</h3><dl>
+      <div><dt>Vitalita</dt><dd>${Math.round(health.vitality)}/100</dd></div>
+      <div><dt>Imunita</dt><dd>${Math.round(health.immunity)}/100</dd></div>
+      <div><dt>Plodnost</dt><dd>${Math.round(health.fertility)}/100</dd></div>
+      <div><dt>Rozmanitost genu</dt><dd>${Math.round(health.heterozygosity * 100)} %</dd></div>
+      <div><dt>Pribuzenske krizeni</dt><dd>${(health.inbreedingCoefficient * 100).toFixed(1)} %</dd></div>
+      <div><dt>Riziko recesivni vady</dt><dd>${(health.defectRisk * 100).toFixed(1)} %</dd></div>
+    </dl>`;
+    ui.pedigreePage.appendChild(geneticHealth);
+  }
+  const inheritance = document.createElement("section"); inheritance.innerHTML = "<h3>Zdedene casti</h3>";
+  const genes = document.createElement("dl");
+  for (const [key, label] of Object.entries(inheritedFeatureLabels)) {
+    const alleles = item.genetics?.[`${key}Alleles`];
+    const legacyParentId = item.genetics?.[`${key}From`];
+    const sources = Array.isArray(alleles)
+      ? alleles.map(({ parentId }) => allFish.find((fish) => fish.id === parentId)?.name ?? archive[parentId]?.name ?? "Neznamy rodic")
+      : [allFish.find((fish) => fish.id === legacyParentId)?.name ?? archive[legacyParentId]?.name ?? "Neznamy puvod"];
+    const row = document.createElement("div"); row.innerHTML = `<dt>${label}</dt><dd>${sources.join(" + ")}</dd>`; genes.appendChild(row);
+  }
+  inheritance.appendChild(genes); ui.pedigreePage.appendChild(inheritance);
+  const hiddenSection = document.createElement("section"); hiddenSection.innerHTML = "<h3>Skryte geny</h3>";
+  const hiddenGenes = document.createElement("dl"); hiddenGenes.className = "hidden-genes";
+  for (const gene of hiddenGeneRows(item)) {
+    const row = document.createElement("div");
+    row.innerHTML = `<dt>${gene.label}</dt><dd><span>${gene.visible}</span> / <b class="${gene.revealed ? "revealed" : "unknown"}">${gene.hidden}</b></dd>`;
+    hiddenGenes.appendChild(row);
+  }
+  hiddenSection.appendChild(hiddenGenes); ui.pedigreePage.appendChild(hiddenSection);
+}
+
+export function renderAtlasPage(ui, sections) {
+  ui.atlasPage.innerHTML = "";
+  for (const section of sections) {
+    const block = document.createElement("section");
+    const found = section.entries.filter((entry) => entry.discovered).length;
+    block.innerHTML = `<h3>${section.label} <small>${found}/${section.entries.length}</small></h3>`;
+    const entries = document.createElement("div"); entries.className = "atlas-entries";
+    for (const entry of section.entries) {
+      const tag = document.createElement("span"); tag.classList.toggle("unknown", !entry.discovered);
+      tag.textContent = entry.discovered ? entry.name : "???"; entries.appendChild(tag);
+    }
+    block.appendChild(entries); ui.atlasPage.appendChild(block);
+  }
+}
+
 export function clearFishCard(ui) {
   ui.appShell.classList.remove("show-card");
   ui.fishName.textContent = "Zadna ryba";
@@ -153,6 +299,7 @@ export function clearFishCard(ui) {
   ui.fishRarity.textContent = "-";
   ui.fishSex.textContent = "-";
   ui.fishCategory.textContent = "-";
+  ui.fishBehavior.textContent = "-";
   ui.fishParents.textContent = "-";
   ui.fishOffspring.textContent = "-";
   ui.traitList.innerHTML = "";
@@ -172,6 +319,7 @@ export function refreshFishCard(ui, item) {
   ui.fishHealth.textContent = describeHealth(item);
   ui.fishStress.textContent = describeStress(item.visibleStress ?? item.stress);
   ui.fishHunger.textContent = `${Math.round(item.hunger)}%`;
+  ui.fishBehavior.textContent = item.behaviorState ?? "pozoruje okoli";
   ui.fishAge.textContent = `${item.age}, ${item.stageName}`;
   renderSymptoms(ui, item);
   updateFishActionButtons(ui, item);

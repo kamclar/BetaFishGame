@@ -1,0 +1,113 @@
+import { defaultAlleles, dominanceOrder, geneticsCatalogs, hiddenAlleleChancePercent } from "../config/geneticsConfig.js";
+const catalogs = geneticsCatalogs;
+
+export const geneticFeatureKeys = ["body", "tail", "dorsalFin", "ventralFin", "pattern", "color"];
+
+const featureLabels = {
+  body: "Telo", tail: "Ocas", dorsalFin: "Hrbetni ploutev",
+  ventralFin: "Brisni ploutev", pattern: "Kresba", color: "Barva",
+};
+
+export function initializeFishGenes(item) {
+  item.genotype ??= {};
+  item.revealedGenes ??= {};
+  for (const key of geneticFeatureKeys) {
+    item[key] ??= defaultAllele(key);
+    const visible = item[key];
+    if (!validAllele(key, visible)) continue;
+    const existing = item.genotype[key];
+    if (!Array.isArray(existing) || existing.length !== 2 || existing.some((allele) => !validAllele(key, allele))) {
+      item.genotype[key] = [visible, deterministicHiddenAllele(item.id ?? item.name ?? "fish", key, visible)];
+    }
+  }
+}
+
+export function inheritFishGenes(child, a, b) {
+  initializeFishGenes(a);
+  initializeFishGenes(b);
+  child.genotype = {};
+  child.revealedGenes = {};
+  child.genetics ??= {};
+  for (const key of geneticFeatureKeys) {
+    const fromA = randomAllele(a.genotype[key]);
+    const fromB = randomAllele(b.genotype[key]);
+    child.genotype[key] = [fromA, fromB];
+    child[key] = expressedAllele(key, fromA, fromB);
+    child.genetics[`${key}Alleles`] = [{ parentId: a.id, allele: fromA }, { parentId: b.id, allele: fromB }];
+    revealCarriedAllele(a, key, fromA);
+    revealCarriedAllele(b, key, fromB);
+  }
+}
+
+export function hiddenGeneRows(item) {
+  initializeFishGenes(item);
+  return geneticFeatureKeys.map((key) => {
+    const pair = item.genotype[key] ?? [];
+    const hidden = pair.find((allele) => allele !== item[key]);
+    const revealed = hidden && item.revealedGenes?.[key] === hidden;
+    return {
+      key,
+      label: featureLabels[key],
+      visible: alleleName(key, item[key]),
+      hidden: hidden ? (revealed ? alleleName(key, hidden) : "Neznamy") : "Zadny odlisny",
+      revealed,
+    };
+  });
+}
+
+export function alleleName(key, allele) {
+  return catalogs[key]?.values?.[allele] ?? allele ?? "Neznamy";
+}
+
+function revealCarriedAllele(parent, key, transmitted) {
+  if (transmitted !== parent[key]) parent.revealedGenes[key] = transmitted;
+}
+
+function randomAllele(pair) {
+  return pair[Math.random() < 0.5 ? 0 : 1];
+}
+
+function expressedAllele(key, first, second) {
+  const order = dominanceOrder[key] ?? [];
+  return order.indexOf(first) <= order.indexOf(second) ? first : second;
+}
+
+function deterministicHiddenAllele(seed, key, visible) {
+  const values = Object.keys(catalogs[key].values).filter((value) => value !== "eldritch");
+  let hash = 0;
+  for (const char of `${seed}:${key}`) hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  if (hash % 100 >= hiddenAlleleChancePercent) return visible;
+  return values[hash % values.length] ?? visible;
+}
+
+function validAllele(key, allele) {
+  return Boolean(catalogs[key]?.values?.[allele]);
+}
+
+function defaultAllele(key) {
+  return defaultAlleles[key];
+}
+
+export function discoverLineageFeatures(economy, fish) {
+  economy.atlas ??= {};
+  for (const key of Object.keys(catalogs)) economy.atlas[key] ??= [];
+  for (const item of fish) {
+    for (const [key, catalog] of Object.entries(catalogs)) {
+      const value = item[key];
+      if (value && catalog.values[value] && !economy.atlas[key].includes(value)) economy.atlas[key].push(value);
+    }
+  }
+}
+
+export function lineageAtlasSections(economy) {
+  return Object.entries(catalogs).map(([key, catalog]) => ({
+    key,
+    label: catalog.label,
+    entries: Object.entries(catalog.values).map(([id, name]) => ({ id, name, discovered: economy.atlas?.[key]?.includes(id) ?? false })),
+  }));
+}
+
+export const inheritedFeatureLabels = {
+  body: "Telo", tail: "Ocas", dorsalFin: "Hrbetni ploutev",
+  ventralFin: "Brisni ploutev", pattern: "Kresba", color: "Barva",
+};

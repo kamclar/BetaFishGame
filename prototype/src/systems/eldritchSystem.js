@@ -51,6 +51,45 @@ export function eldritchJournalEntry(babies) {
   return null;
 }
 
+export function createCombinedEldritchPreview() {
+  const preview = {
+    id: "eldritch-preview-stage-4",
+    name: "Mezihlas",
+    species: "Kombinovany hlubinni krizenec",
+    category: "hybrid",
+    rarity: "Rare",
+    age: "36 dni",
+    ageDays: 36,
+    sex: "female",
+    health: 96,
+    visibleHealth: 96,
+    stress: 6,
+    hunger: 18,
+    healthNote: "Anatomie kombinuje bezne a hlubinne znaky.",
+    symptoms: [],
+    diseases: [],
+    history: ["Zkusebni kombinovana eldritch forma byla umistena do karanteny."],
+    traits: ["klidna", "skvrnita", "nocni", "hlubinna"],
+    parents: ["neznamy rodic", "hlubinna linie"],
+    tank: "quarantine",
+    x: 520,
+    y: 260,
+    speed: 25,
+    dir: 1,
+    size: 2.15,
+    color: "eldritch",
+    body: "diamond",
+    tail: "broad",
+    dorsalFin: "sail",
+    ventralFin: "paired",
+    pattern: "spots",
+    specialSprite: null,
+    phase: 1.7,
+  };
+  applyStage(preview, 4);
+  return preview;
+}
+
 function applyStage(baby, stage) {
   baby.eldritchStage = stage;
   baby.specialSprite = null;

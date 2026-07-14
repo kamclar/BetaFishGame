@@ -1,21 +1,30 @@
-import { drawAquarium, drawFoodParticles, drawGlass, drawGlassAlgae, drawLiquidClouds, drawSaleEffects } from "./art/aquariumArt.js";
-import { getGlassBounds, getSurfaceY } from "./art/aquariumArt.js";
+import { drawAquarium, drawDayNightOverlay, drawFoodParticles, drawGlass, drawGlassAlgae, drawLiquidClouds, drawSaleEffects } from "./art/aquariumArt.js";
+import { getGlassBounds, getSurfaceY, maskAquariumEdges } from "./art/aquariumArt.js";
 import { drawFish } from "./art/fishArt.js";
 import { fishRenderScale } from "./art/fishArt.js";
 import { loadFishSpriteAssets } from "./art/spriteAssets.js";
-import { fish, palette, plants, tanks } from "./data/fishData.js";
+import { ensureStarterSchool, fish, palette, plants, tanks } from "./data/fishData.js";
 import { applySpeciesMetadata } from "./data/speciesData.js";
 import { createPlant, plantTypes, plantTypeOrder } from "./data/plantData.js";
 import { diseaseDatabase } from "./data/healthData.js";
 import { initializeLifecycle, updateLifecycle } from "./systems/lifecycleSystem.js";
-import { applyTankEffects, describeWater, formatGameTime, gameClock, scrapeAlgae, updateWorld, vacuumTank } from "./systems/tankSystem.js";
-import { actionCosts, addSupply, canAfford, consumeSupply, economy, initializeEconomy, payForAction, recordAction, supplyCount, taskText } from "./systems/economySystem.js";
+import { applyTankEffects, changeWater, ensureWaterChemistry, formatCompactWaterTest, formatGameTime, formatWaterTest, gameClock, scrapeAlgae, updateWorld, vacuumTank, waterTestAdvice, waterTestResult } from "./systems/tankSystem.js";
+import { actionCosts, addSkillExperience, addSupply, canAfford, consumeSupply, economy, ensureDailyGoals, initializeEconomy, isShopUnlocked, payForAction, recordAction, shopUnlocks, skillInfo, supplyCount, taskText } from "./systems/economySystem.js";
 import { clearSavedGame, loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
 import { addMysteryEggs, initializeBreeding, updateSpawning } from "./systems/breedingSystem.js";
 import { prepareForSale, startLiveSales, updateLiveSales } from "./systems/salesSystem.js";
 import { contractText, ensureContract, recordContractSale } from "./systems/contractSystem.js";
-import { eldritchJournalEntry } from "./systems/eldritchSystem.js";
+import { createCombinedEldritchPreview, eldritchJournalEntry } from "./systems/eldritchSystem.js";
+import { discoverLineageFeatures, lineageAtlasSections } from "./systems/lineageSystem.js";
+import { initializePedigreeArchive, pairingAssessment, registerFishPedigree } from "./systems/pedigreeSystem.js";
+import { initializeStory, recordStoryAction, storyChapters, updateStory } from "./systems/storySystem.js";
+import { gameDaysElapsed } from "./systems/timeSystem.js";
+import { dayPeriod, daylightAt, updateFishBehavior } from "./systems/behaviorSystem.js";
+import { advanceTutorial, currentTutorialStep, initializeTutorial, skipTutorial } from "./systems/tutorialSystem.js";
+import { hungerConfig, treatmentDurationDays } from "./config/fishConfig.js";
+import { supplyPackSizes } from "./config/economyConfig.js";
+import { waterConfig } from "./config/waterConfig.js";
 import {
   exposeTankToTrouble,
   getActiveSymptoms,
@@ -25,18 +34,49 @@ import {
   updateDiseases,
   updateTroubleEffects,
 } from "./systems/healthSystem.js";
-import { addFishHistory, addJournalEntry, addLog, clearFishCard, createUi, refreshFishCard, renderFishCard, updateTankTabs } from "./ui.js";
+import { addFishHistory, addJournalEntry, addLog, clearFishCard, createUi, refreshFishCard, renderAtlasPage, renderDailyGoals, renderFishCard, renderPedigreePage, renderStoryChapters, renderTutorial, setFishCardPage, setJournalPage, updateTankTabs } from "./ui.js";
 
 const canvas = document.getElementById("aquarium");
 const ctx = canvas.getContext("2d");
 const ui = createUi();
+const hudToggle = document.getElementById("hudToggle");
 loadFishSpriteAssets();
 restoreSavedGame();
-initializeEconomy();
+const existingEldritchPreview = fish.find((item) => item.id === "eldritch-preview-stage-4");
+if (existingEldritchPreview) {
+  Object.assign(existingEldritchPreview, {
+    color: "eldritch",
+    body: "diamond",
+    tail: "eldritch",
+    dorsalFin: "spiky",
+    ventralFin: "eldritch",
+    pattern: "glow",
+    specialSprite: null,
+    eldritchStage: 4,
+  });
+} else {
+  fish.push(createCombinedEldritchPreview());
+}
+initializeEconomy(gameClock.day);
+initializeTutorial(economy);
+if (!economy.starterSchoolAdded) {
+  ensureStarterSchool(fish);
+  economy.starterSchoolAdded = true;
+}
+migrateBiologicalClock();
+initializeStory(economy);
+for (const [tankId, tank] of Object.entries(tanks)) {
+  tank.capacity = waterConfig.capacities[tankId] ?? waterConfig.capacities.fallback;
+  ensureWaterChemistry(tank);
+  if (tank.lastTest && tank.lastTest.oxygen == null) tank.lastTest = null;
+}
 applySpeciesMetadata(fish);
 ensureContract(economy);
 for (const item of fish) initializeLifecycle(item);
 initializeBreeding(fish);
+initializePedigreeArchive(economy, fish);
+discoverLineageFeatures(economy, fish);
+unlockStoryChapters();
 for (const item of fish) item.traits = item.traits.map((trait) => trait === "ticha" ? "echolokacni" : trait);
 
 let selectedFish = null;
@@ -51,10 +91,44 @@ let toolOverGlass = false;
 let resettingGame = false;
 let maintenanceDragging = false;
 let siphonLoad = 0;
+let lastSiphonCloudAt = 0;
 const foodParticles = [];
 const liquidClouds = [];
 const debugMode = new URLSearchParams(location.search).has("debugTime");
 document.body.classList.toggle("debug-mode", debugMode);
+
+function setHudOpen(open) {
+  ui.appShell.classList.toggle("hud-open", open);
+  hudToggle.setAttribute("aria-expanded", String(open));
+  hudToggle.title = open ? "Schovat horní panel" : "Otevřít horní panel";
+  hudToggle.querySelector(".sr-only").textContent = hudToggle.title;
+}
+
+hudToggle.addEventListener("click", () => setHudOpen(!ui.appShell.classList.contains("hud-open")));
+
+function refreshTutorial() {
+  const step = currentTutorialStep(economy);
+  if (step?.opensHud) setHudOpen(true);
+  renderTutorial(ui, step);
+}
+
+function handleTutorialEvent(type, detail = "") {
+  const event = detail ? `${type}:${detail}` : type;
+  if (advanceTutorial(economy, event)) refreshTutorial();
+}
+
+ui.tutorialContinue.addEventListener("click", () => handleTutorialEvent("continue"));
+ui.tutorialSkip.addEventListener("click", () => {
+  skipTutorial(economy);
+  refreshTutorial();
+});
+refreshTutorial();
+
+function migrateBiologicalClock() {
+  if ((economy.timeModelVersion ?? 0) >= 2) return;
+  for (const item of fish) item.hunger = Math.min(item.hunger ?? 35, 45);
+  economy.timeModelVersion = 2;
+}
 
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -82,11 +156,16 @@ function switchTank(tankId) {
 }
 
 function update(delta) {
+  const elapsedDays = gameDaysElapsed(delta);
   const view = getView();
   updateFoodParticles(delta, view);
   updateLiquidClouds(delta);
   updateWorld(delta, tanks, plants, fish, (day) => {
     addJournalEntry(ui, t("event.day_started", { day }));
+    if (ensureDailyGoals(day)) {
+      renderDailyGoals(ui, economy.dailyGoals);
+      addJournalEntry(ui, `Den ${day}: byly pripraveny tri nove chovatelske cile.`);
+    }
   });
   updateSpawning(
     delta,
@@ -98,6 +177,9 @@ function update(delta) {
     },
     (babies, parents) => {
       babies.forEach(initializeLifecycle);
+      babies.forEach((baby) => registerFishPedigree(economy, baby));
+      parents.forEach((parent) => registerFishPedigree(economy, parent));
+      discoverLineageFeatures(economy, babies);
       const names = babies.map((baby) => baby.name).join(" a ");
       const message = parents.length === 2
         ? `Z jiker ryb ${parents[0].name} a ${parents[1].name} se vylihl poter: ${names}.`
@@ -106,42 +188,54 @@ function update(delta) {
       const anomalyEntry = eldritchJournalEntry(babies);
       if (anomalyEntry) addJournalEntry(ui, anomalyEntry);
     },
-    { minute: gameClock.minute, waterQuality: tanks.nursery.waterQuality, debug: debugMode }
+    { minute: gameClock.minute, waterQuality: tanks.nursery.waterQuality, debug: debugMode, pedigreeArchive: economy.pedigreeArchive }
   );
   updateLiveSales(delta, tanks.sale, fish, economy, (item, price) => {
     addJournalEntry(ui, `Zakaznik koupil rybu ${item.name} za ${price} penez.`);
+    handleSkillChange(addSkillExperience((item.health ?? 0) >= 85 ? 2 : 1));
     completeAction("sell");
-    const contractReward = recordContractSale(item, economy);
-    if (contractReward) addJournalEntry(ui, `Zakazka splnena. Bonus ${contractReward} penez a nova zakazka je pripravena.`);
+    const contractResult = recordContractSale(item, economy);
+    if (contractResult) {
+      handleSkillChange(addSkillExperience(contractResult.skillXp));
+      addJournalEntry(ui, `Zakazka splnena. Bonus ${contractResult.reward} penez a +${contractResult.skillXp} zkusenosti.`);
+    }
     if (selectedFish?.id === item.id) { selectedFish = null; clearFishCard(ui); }
   });
+  unlockStoryChapters();
 
   for (const item of fish) {
-    item.phase += delta * 3;
+    item.phase += delta * (0.55 + 2.45 * Math.max(0.12, item.activityLevel ?? 1));
     updateLifecycle(item, delta, (text) => addJournalEntry(ui, `Den ${Math.floor(item.ageDays)}: ${text}`));
     const appetite = getAppetiteFactor(item);
-    const hungerRate = item.traits.includes("ciziMetabolismus") ? 0.5 : 0.85;
-    item.hunger = Math.min(100, item.hunger + delta * hungerRate);
-    applyTankEffects(item, delta, tanks[item.tank]);
-    updateDiseases(item, delta, tanks, (text) => addLog(ui, text));
+    const hungerPerDay = item.traits.includes("ciziMetabolismus") ? hungerConfig.eldritchPerDay : hungerConfig.normalPerDay;
+    item.hunger = Math.min(100, item.hunger + elapsedDays * hungerPerDay);
+    applyTankEffects(item, elapsedDays, tanks[item.tank]);
+    updateDiseases(item, elapsedDays, tanks, (text) => addLog(ui, text));
     updateTroubleEffects(item);
     item.canBreed = item.canBreedByAge && !hasBreedingBlock(item);
 
     feedFishNearFood(item, appetite, delta);
   }
 
-  spreadContagiousDiseases(delta, fish, (text) => addLog(ui, text));
+  spreadContagiousDiseases(elapsedDays, fish, (text) => addLog(ui, text));
 
-  for (const item of getVisibleFish()) {
+  const visibleFish = getVisibleFish();
+  const glass = getGlassBounds(view);
+  const surfaceY = getSurfaceY(view);
+  const floorY = view.height - 82;
+  const foodPresent = foodParticles.some((particle) => particle.tank === currentTank);
+  tanks[currentTank].lightLevel = daylightAt(gameClock.minute);
+  tanks[currentTank].dayPeriod = dayPeriod(gameClock.minute);
+  for (const item of visibleFish) {
     const bob = Math.sin(item.phase) * 9;
-    const hungerBoost = item.hunger > 68 ? 1.18 : 1;
-    item.x += item.dir * item.speed * (item.stageSpeed ?? 1) * hungerBoost * delta;
-    item.y += Math.sin(item.phase * 0.7) * delta * 12;
+    const hungerBoost = item.hunger > hungerConfig.hungryMovementThreshold ? hungerConfig.hungryMovementMultiplier : 1;
+    const behavior = updateFishBehavior(item, delta, { minute: gameClock.minute, tankFish: visibleFish, glass, surfaceY, floorY, foodPresent });
+    item.x += item.dir * item.speed * (item.stageSpeed ?? 1) * hungerBoost * behavior.speedMultiplier * delta;
+    item.y += Math.sin(item.phase * 0.7) * delta * 12 * Math.max(0.16, behavior.speedMultiplier);
 
     attractFishToFood(item, delta);
 
     const margin = 74 * item.size * (item.growthScale ?? 1) * fishRenderScale;
-    const glass = getGlassBounds(view);
     if (item.x > glass.right - margin) {
       item.x = glass.right - margin;
       item.dir = -1;
@@ -151,7 +245,7 @@ function update(delta) {
       item.dir = 1;
     }
 
-    item.y = Math.max(getSurfaceY(view) + 18, Math.min(view.height - 82, item.y + bob * delta));
+    item.y = Math.max(surfaceY + 18, Math.min(floorY, item.y + bob * delta * Math.max(0.12, behavior.speedMultiplier)));
   }
 }
 
@@ -172,14 +266,24 @@ function draw() {
   }
   if (currentTank === "sale") drawSaleEffects(ctx, tanks.sale);
   drawGlassAlgae(ctx, view, tanks[currentTank]);
+  drawDayNightOverlay(ctx, view, daylightAt(gameClock.minute), dayPeriod(gameClock.minute));
   ctx.restore();
 
+  maskAquariumEdges(ctx, view);
   drawGlass(ctx, view);
   refreshFishCard(ui, selectedFish);
   ui.gameDay.textContent = t("ui.day", { day: gameClock.day });
-  ui.gameTime.textContent = formatGameTime();
-  ui.waterQuality.textContent = t("ui.water", { quality: describeWater(tanks[currentTank]).toLowerCase() });
+  ui.gameTime.textContent = `${formatGameTime()} · ${dayPeriod(gameClock.minute)}`;
+  const lastWaterTest = tanks[currentTank].lastTest;
+  ui.waterQuality.textContent = lastWaterTest
+    ? t("ui.water", { quality: lastWaterTest.quality.toLowerCase() })
+    : "Voda: nezměřená";
+  ui.waterReadings.textContent = lastWaterTest
+    ? `Poslední test: ${formatCompactWaterTest(lastWaterTest)}`
+    : "Test vody: neproveden";
   ui.coinCount.textContent = t("ui.coins", { coins: economy.coins });
+  const skill = skillInfo();
+  ui.skillStatus.textContent = `Zkus. ${skill.value} · ${skill.name}`;
   document.getElementById("foodDoseCount").textContent = `${supplyCount("food")} davek`;
   ui.currentTask.textContent = taskText();
   ui.customerContract.textContent = contractText(ensureContract(economy));
@@ -189,6 +293,24 @@ function selectFish(item) {
   selectedFish = item;
   renderFishCard(ui, item);
   addLog(ui, `${item.name}: karta otevrena.`);
+  handleTutorialEvent("fishSelected");
+}
+
+function selectRelatedFish(item) {
+  currentTank = item.tank;
+  updateTankTabs(ui, tanks, currentTank);
+  selectFish(item);
+  showFishPage("pedigree");
+}
+
+function showFishPage(page) {
+  if (!selectedFish) return;
+  setFishCardPage(ui, page);
+  if (page === "pedigree") renderPedigreePage(ui, selectedFish, fish, selectRelatedFish, economy.pedigreeArchive);
+  if (page === "atlas") {
+    discoverLineageFeatures(economy, fish);
+    renderAtlasPage(ui, lineageAtlasSections(economy));
+  }
 }
 
 function deselectFish() {
@@ -197,15 +319,37 @@ function deselectFish() {
 }
 
 function openJournal() {
+  renderDailyGoals(ui, economy.dailyGoals);
+  renderStoryChapters(ui, storyChapters(economy));
+  setJournalPage(ui, "story");
+  ui.appShell.classList.remove("show-card");
   ui.appShell.classList.add("show-journal");
+  handleTutorialEvent("journalOpened");
+}
+
+function unlockStoryChapters() {
+  const unlocked = updateStory(economy, { tanks, plants, fish });
+  for (const chapter of unlocked) addJournalEntry(ui, `Nalezena nova stranka deniku: ${chapter.title}.`);
+  if (unlocked.length) renderStoryChapters(ui, storyChapters(economy));
+}
+
+function performWaterChange() {
+  changeWater(tanks[currentTank], waterConfig.waterChangeFraction);
+  tanks[currentTank].lastTest = null;
+  recordStoryAction(economy, "waterChange");
+  addLiquidCloud(canvas.width * 0.5, canvas.height * 0.35, "126, 188, 207", 60);
+  addJournalEntry(ui, `${tanks[currentTank].name}: vyměněna třetina vody. Nové hodnoty je potřeba změřit.`);
+  completeAction("clean");
+  unlockStoryChapters();
 }
 
 function closeJournal() {
   ui.appShell.classList.remove("show-journal");
+  if (selectedFish) ui.appShell.classList.add("show-card");
 }
 
 function openShop() {
-  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  refreshShop();
   ui.appShell.classList.add("show-shop");
 }
 
@@ -214,29 +358,86 @@ function closeShop() {
 }
 
 function buySnail() {
+  if (!requireShopUnlock("snail")) return;
   if (!spendForAction("snail")) return;
   tanks[currentTank].snails = (tanks[currentTank].snails ?? 0) + 1;
-  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  refreshShop();
   addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} pribyla ampularie. Pomalu cisti rasy ze skla.`);
 }
 
 function buyFood() {
   if (!spendForAction("foodPack")) return;
-  addSupply("food", 12);
-  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  addSupply("food", supplyPackSizes.food);
+  refreshShop();
   addJournalEntry(ui, "Koupena nova krabicka vlocek: 12 davek.");
 }
 
 function buyEggs() {
+  if (!requireShopUnlock("eggs")) return;
   if (tanks.nursery.spawning?.eggs) {
     addJournalEntry(ui, "Ve treci nadrzi uz je jedna snuska. Nejdřív pockej, az se vylihne.");
     return;
   }
   if (!spendForAction("eggs")) return;
   addMysteryEggs(tanks.nursery);
-  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  refreshShop();
   switchTank("nursery");
   addJournalEntry(ui, "Do treci nadrze byly vlozeny zakoupene jikry nezname linie. Vylihnou se z nich 1–2 rybky.");
+}
+
+function buyFilterUpgrade() {
+  if (!requireShopUnlock("filter") || (tanks[currentTank].filterLevel ?? 1) >= 2) return;
+  if (!spendForAction("filterUpgrade")) return;
+  tanks[currentTank].filterLevel = 2;
+  refreshShop();
+  addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} byl nainstalovan Tichy filtr II.`);
+}
+
+function buyHeater() {
+  if (!requireShopUnlock("heater") || tanks[currentTank].heater) return;
+  if (!spendForAction("heater")) return;
+  tanks[currentTank].heater = true;
+  tanks[currentTank].heaterSetpoint = waterConfig.temperature.heaterSetpoint;
+  refreshShop();
+  addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} bylo nainstalovano topitko s termostatem.`);
+}
+
+function buyAerator() {
+  if (!requireShopUnlock("aerator") || tanks[currentTank].aerator) return;
+  if (!spendForAction("aerator")) return;
+  tanks[currentTank].aerator = true;
+  refreshShop();
+  addJournalEntry(ui, `V nadrzi ${tanks[currentTank].name} bylo spusteno vzduchovani.`);
+}
+
+function requireShopUnlock(id) {
+  if (isShopUnlocked(id)) return true;
+  addJournalEntry(ui, `Toto zbozi se odemkne pri chovatelske zkusenosti ${shopUnlocks[id]}.`);
+  return false;
+}
+
+function refreshShop() {
+  document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
+  const skill = skillInfo();
+  document.getElementById("shopSkill").textContent = `${skill.name} · zkusenost ${skill.value}${skill.nextAt ? `/${skill.nextAt}` : ""}`;
+  for (const product of document.querySelectorAll("[data-shop-item]")) {
+    const id = product.dataset.shopItem;
+    const unlocked = isShopUnlocked(id);
+    const purchased = (id === "filter" && (tanks[currentTank].filterLevel ?? 1) >= 2)
+      || (id === "heater" && tanks[currentTank].heater)
+      || (id === "aerator" && tanks[currentTank].aerator);
+    product.disabled = !unlocked || purchased;
+    product.classList.toggle("locked", !unlocked);
+    const price = product.querySelector("b");
+    const priceAction = { food: "foodPack", snail: "snail", eggs: "eggs", filter: "filterUpgrade", heater: "heater", aerator: "aerator" }[id];
+    const configuredPrice = actionCosts[priceAction] ?? 0;
+    if (price) price.textContent = purchased ? "Koupeno" : unlocked ? `${configuredPrice} penez` : `Zkus. ${shopUnlocks[id]}`;
+  }
+}
+
+function handleSkillChange(change) {
+  if (!change?.leveledUp) return;
+  addJournalEntry(ui, `Nova uroven chovatelske dovednosti: ${change.current.name}. V obchode muze byt nove zbozi.`);
 }
 
 function moveSelectedFish() {
@@ -260,7 +461,7 @@ function treatSelectedFish() {
   if (selectedFish.diseases.length > 0) {
     const diseaseCase = selectedFish.diseases[0];
     const disease = diseaseDatabase[diseaseCase.id];
-    diseaseCase.treatmentTime = Math.max(diseaseCase.treatmentTime, selectedFish.tank === "quarantine" ? 9 : 4);
+    diseaseCase.treatmentTime = Math.max(diseaseCase.treatmentTime, selectedFish.tank === "quarantine" ? treatmentDurationDays.quarantine : treatmentDurationDays.normal);
     selectedFish.stress = Math.min(100, selectedFish.stress + 5);
     addFishHistory(ui, selectedFish, `Podan lek: ${disease.treatmentName}.`);
     addLog(ui, `${selectedFish.name}: podan ${disease.treatmentName}. V karantene zabira lepe.`);
@@ -285,8 +486,15 @@ function breedSelectedFish() {
   }
   selectedFish.previousTank = selectedFish.tank;
   selectedFish.tank = "nursery";
+  const mate = fish.find((item) => item.id !== selectedFish.id && item.tank === "nursery" && item.sex !== selectedFish.sex);
   addFishHistory(ui, selectedFish, "Presunuta do treci nadrze.");
-  addJournalEntry(ui, `${selectedFish.name}: presunuta do treci nadrze. Pridej zdraveho dospeleho partnera opacneho pohlavi.`);
+  if (mate) {
+    const assessment = pairingAssessment(selectedFish, mate, economy.pedigreeArchive);
+    const ancestors = assessment.sharedAncestors.length ? ` Spolecni predci: ${assessment.sharedAncestors.join(", ")}.` : "";
+    addJournalEntry(ui, `${selectedFish.name} + ${mate.name}: pribuznost ${(assessment.coefficient * 100).toFixed(1)} %, geneticke riziko ${assessment.level}.${ancestors}`);
+  } else {
+    addJournalEntry(ui, `${selectedFish.name}: presunuta do treci nadrze. Pridej zdraveho dospeleho partnera opacneho pohlavi.`);
+  }
   currentTank = "nursery";
   updateTankTabs(ui, tanks, currentTank);
   renderFishCard(ui, selectedFish);
@@ -361,6 +569,8 @@ window.addEventListener("keydown", (event) => {
       startSalesDay();
     } else if (button.dataset.action === "clean" || button.dataset.action === "scrape") {
       setHeldItem(button.dataset.action);
+    } else if (button.dataset.action === "water-change") {
+      performWaterChange();
     } else if (button.dataset.action === "restart-game") {
       restartGame();
     } else {
@@ -374,7 +584,12 @@ document.getElementById("shopCloseButton").addEventListener("click", closeShop);
 document.getElementById("buyFoodButton").addEventListener("click", buyFood);
 document.getElementById("buySnailButton").addEventListener("click", buySnail);
 document.getElementById("buyEggsButton").addEventListener("click", buyEggs);
+document.getElementById("buyFilterButton").addEventListener("click", buyFilterUpgrade);
+document.getElementById("buyHeaterButton").addEventListener("click", buyHeater);
+document.getElementById("buyAeratorButton").addEventListener("click", buyAerator);
 document.getElementById("fishCardCloseButton").addEventListener("click", deselectFish);
+for (const tab of ui.fishPageTabs) tab.addEventListener("click", () => showFishPage(tab.dataset.fishPage));
+for (const tab of ui.journalPageTabs) tab.addEventListener("click", () => setJournalPage(ui, tab.dataset.journalPage));
 
 ui.moveFishButton.addEventListener("click", moveSelectedFish);
 ui.treatFishButton.addEventListener("click", treatSelectedFish);
@@ -453,6 +668,7 @@ function setHeldItem(action) {
   if (heldItem === "clean") {
     siphonLoad = 0;
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
+    ui.heldCursor.style.setProperty("--siphon-fill", "0px");
   }
 }
 
@@ -473,8 +689,12 @@ function useHeldItem(x, y) {
   if (heldItem === "test") {
     if (!spendForAction("test")) return;
     addLiquidCloud(x, y, "148, 103, 184", 18);
-    addJournalEntry(ui, t("event.water_test", { day: gameClock.day, tank: tanks[currentTank].name, quality: describeWater(tanks[currentTank]).toLowerCase(), waste: Math.round((tanks[currentTank].waste ?? 0) * 100) }));
+    const result = waterTestResult(tanks[currentTank]);
+    tanks[currentTank].lastTest = result;
+    recordStoryAction(economy, "test");
+    addJournalEntry(ui, `Den ${gameClock.day}: ${tanks[currentTank].name}. ${formatWaterTest(result)}. Voda ${result.quality.toLowerCase()}. Doporuceni: ${waterTestAdvice(result)}`);
     completeAction("test");
+    unlockStoryChapters();
   }
 
   if (heldItem === "plant") {
@@ -507,7 +727,12 @@ function spendForAction(action) {
 }
 
 function completeAction(action) {
-  recordAction(action, (task) => addJournalEntry(ui, t("event.task_complete", { task: task.label, reward: task.reward ?? 0 })));
+  recordAction(action, (task, skillChange) => {
+    addJournalEntry(ui, `${t("event.task_complete", { task: task.label, reward: task.reward ?? 0 })} +${task.skillXp ?? task.reputation ?? 0} zkusenosti.`);
+    handleSkillChange(skillChange);
+    renderDailyGoals(ui, economy.dailyGoals);
+  });
+  handleTutorialEvent("action", action);
 }
 
 function restoreSavedGame() {
@@ -542,6 +767,8 @@ function restoreSavedGame() {
   restoreObject(tanks.nursery, saved.tanks?.nursery);
   restoreObject(tanks.sale, saved.tanks?.sale);
   restoreObject(economy, saved.economy);
+  if (saved.economy?.skillXp == null && saved.economy?.reputation != null) economy.skillXp = saved.economy.reputation;
+  if ((saved.economy?.filterLevel ?? 1) >= 2 && !saved.tanks?.main?.filterLevel) tanks.main.filterLevel = 2;
   if (saved.gameClock) {
     gameClock.day = saved.gameClock.day ?? gameClock.day;
     gameClock.minute = saved.gameClock.minute ?? gameClock.minute;
@@ -589,6 +816,7 @@ canvas.addEventListener("pointerup", (event) => {
   canvas.releasePointerCapture(event.pointerId);
   if (heldItem === "clean") {
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
+    ui.heldCursor.style.setProperty("--siphon-fill", "0px");
     siphonLoad = 0;
     completeAction("clean");
   }
@@ -605,11 +833,33 @@ function applyMaintenance(event) {
     const removed = Math.max(0, before - (tanks[currentTank].debris ?? 0));
     siphonLoad = Math.min(0.92, siphonLoad + removed * 9 + 0.018);
     ui.heldCursor.style.setProperty("--siphon-turbidity", siphonLoad.toFixed(2));
+    ui.heldCursor.style.setProperty("--siphon-fill", `${Math.round(siphonLoad * 47)}px`);
+    if (performance.now() - lastSiphonCloudAt > 85) {
+      addSiphonSediment(x, y - 3);
+      lastSiphonCloudAt = performance.now();
+    }
   }
   if (heldItem === "scrape") {
     const waterTop = getSurfaceY(getView());
     const usableHeight = Math.max(1, rect.height - waterTop - 25);
     scrapeAlgae(tanks[currentTank], x / rect.width, (y - waterTop) / usableHeight, 0.075, 0.06);
+  }
+}
+
+function addSiphonSediment(x, y) {
+  for (let i = 0; i < 3; i += 1) {
+    liquidClouds.push({
+      x: x + (i - 1) * 7,
+      y: y - (i % 2) * 4,
+      vx: (i - 1) * 7,
+      vy: -3 - i,
+      radius: 5 + i * 2,
+      color: "112, 76, 43",
+      life: 0.7,
+      maxLife: 0.7,
+      sediment: true,
+      tank: currentTank,
+    });
   }
 }
 
@@ -691,7 +941,7 @@ function attractFishToFood(item, delta) {
 function feedFishNearFood(item, appetite, delta) {
   const { particle, distance } = getNearestFood(item);
   if (!particle || distance > 28) return;
-  item.hunger = Math.max(0, item.hunger - delta * 42 * appetite);
+  item.hunger = Math.max(0, item.hunger - delta * hungerConfig.feedingPowerPerSecond * appetite);
   particle.life -= delta * 7;
 }
 

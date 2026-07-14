@@ -1,0 +1,179 @@
+BETAFISH GAME
+TEXTY TUTORIALU A PŘÍBĚHOVÉHO DENÍKU
+
+Tento soubor je určený pro pohodlné čtení a připomínkování textů.
+Texty používané hrou jsou uložené v prototype/src/i18n/csTutorial.js a csStory.js.
+
+
+============================================================
+TUTORIAL
+============================================================
+
+KROK 1 Z 7
+Název: Akvárium po strýci
+
+Strýc je už několik týdnů pryč. Nikdo neví, kam odešel. O akvárium se mezitím nikdo nestaral a ryb ti bylo líto. Vzala sis proto klíče od jeho bytu.
+
+Tlačítko: Podívat se k nádrži
+
+
+KROK 2 Z 7
+Název: Jsou ještě v pořádku?
+
+Některé ryby připlavou ke sklu, když se přiblížíš. Klikni na jednu z nich a pořádně si ji prohlédni.
+
+
+KROK 3 Z 7
+Název: Krmení je v levé zásuvce
+
+Na krabičce je strýcovým písmem napsáno: Jedna dávka denně. Když něco zůstane na dně, bylo toho moc. Vezmi vločky z police a klikni do vody.
+
+
+KROK 4 Z 7
+Název: Vodu nejde poznat pohledem
+
+Vedle krmení leží testovací sada. Víčko je odřené častým používáním. Vezmi ji a klikni do nádrže.
+
+
+KROK 5 Z 7
+Název: Čísla na štítku
+
+Výsledek se ukázal nahoře. Amoniak a dusitany by měly zůstat co nejníž. Strýc si každé měření zapisoval. Možná po něm někde zůstal sešit.
+
+Tlačítko: Hledat dál
+
+
+KROK 6 Z 7
+Název: Sešit pod policí
+
+Je zasunutý až vzadu pod nádrží. Na deskách jsou mapy suchych kapek a strýcovy iniciály. Otevři deník na polici.
+
+
+KROK 7 Z 7
+Název: Pro dnešek
+
+Ryby jsou nakrmené a voda změřená. V sešitě zůstala spousta poznámek. Některé stránky někdo vytrhl. Zatím raději budu dělat to co dělal strýc každý den.
+
+Tlačítko: Postarat se o akvárium
+
+
+DALŠÍ TEXTY TUTORIALU
+
+Ukazatel postupu: Krok {current} z {total}
+Možnost ukončení: Přeskočit tutorial
+
+
+============================================================
+PŘÍBĚHOVÝ DENÍK
+============================================================
+
+STRÁNKA: SEŠIT POD POLICÍ
+Poznámka k původu: Na vnitřní straně desek
+
+Ráno jsem našel u filtru zbytky vloček. Zase jsem nasypal moc. Ryby se tváří hladově pokaždé, když přijdu ke sklu, ale podle nich se řídit nemůžu.
+
+V hlavní nádrži se konečně drží hodnoty. Měřím vždy před výměnou vody. Jednou jsem to udělal obráceně a celý zápis byl k ničemu.
+
+Musím doplnit rodokmeny ryb z hlavní nádrže. U dvou samic pořád nevím, ze které snůšky pocházejí.
+
+Poznámka na okraji: Nejdřív test. Potom výměna.
+
+
+STRÁNKA: PAPÍREK ZALOŽENÝ U TESTŮ
+Poznámka k původu: Bez data
+
+Amoniak byl ráno zvýšený. Na rybách zatím nic nevidím. Krmení dnes vynechám a večer znovu změřím dusitany.
+
+Minule jsem propral náplň filtru pod kohoutkem s chlorovanou vodou. O dva dny později se voda zhoršila. Příště ji jen propláchnu v odpuštěné vodě z nádrže.
+
+Poznámka na okraji: Zkontrolovat NH3 a NO2 před krmením.
+
+
+STRÁNKA: NÁDRŽ ČÍSLO DVĚ
+Poznámka k původu: Stránka je zvlněná od vody
+
+Dnes jsem do nádrže nesahal. Hodnoty drží a nové listy už dosáhly k hladině. Ryby přestaly ráno lapat po vzduchu.
+
+Mám chuť zase něco upravovat, ale nechám to být. Posledně jsem rovnováhu pokazil právě tímhle.
+
+Poznámka na okraji: Tento týden bez přesazování.
+
+
+STRÁNKA: PRVNÍ SNŮŠKA
+Poznámka k původu: Záznam z třecí nádrže
+
+Jikry vypadaly zdravě. Zapsal jsem oba rodiče a označil potěr dřív, než jsem ho přesunul.
+
+Jedna mladá má ocas po samci. Barvu ne. Nechám ji v chovu a počkám na další generaci.
+
+Bez záznamů se v tom člověk ztratí rychle.
+
+Poznámka na okraji: Samice 4B, samec 7A. Snůška označena 4B/7A-1.
+
+
+STRÁNKA: ČERVENĚ PODTRŽENÁ JMÉNA
+Poznámka k původu: Vytržené z chovné knihy
+
+Křížení jsem opakoval. Potěr je menší než minule a dvě ryby špatně jedí.
+
+V rodokmenu se vrací stejné jméno. Přehlédl jsem ho, protože jsem jednu samici vedl pod starým číslem.
+
+Tuhle větev už dál spojovat nebudu.
+
+Poznámka na okraji: Přepsat stará čísla do nového rodokmenu.
+
+
+STRÁNKA: RYBA Z JEZÍRKA
+Poznámka k původu: Datum se rozpilo
+
+Tmavou samici jsem přinesl z jezírka za lomem. V karanténě byla zdravá a testy nic neukázaly.
+
+První potěr má na břišní ploutvi tenké výběžky. U rodičů nejsou. Prošel jsem staré fotografie pod lampou.
+
+Potěr zatím nechám v zadní nádrži. NEvím proč, ale zatím nechci, aby se tahle linie dostala mezi ostatní ryby, dokud nezjistím, co se stalo.
+
+Poznámka na okraji: Vyfotit ploutev znovu za týden.
+
+
+STRÁNKA: 2:10
+Poznámka k původu: Poznámka psaná propiskou
+
+Filtr ve trojce zase chrčí. Rozebral jsem ho. Rotor je čistý.
+
+Po zhasnutí se potěr srovnal u zadního skla. Ve 2:10 se všechny ryby otočily.
+
+Zítra dám mezi nádrže desku a nechám přes noc zapnuté světlo v chodbě.
+
+Poznámka na okraji: Budík na 2:00. Neusnout u nádrže.
+
+
+STRÁNKA: NESEDÍ POČET
+Poznámka k původu: List byl několikrát přeložený
+
+Ve snůšce mělo být šestnáct jiker. Ráno jsem napočítal devatenáct.
+
+Samice je pořád oddělená. Samec je v prodejní nádrži.
+
+Tři nové jikry jsou tmavší. Nechal jsem je tam a označil jejich polohu na skle.
+
+Poznámka na okraji: Znovu spočítat před rozsvícením.
+
+
+STRÁNKA: POSLEDNÍ ČITELNÁ STRÁNKA
+Poznámka k původu: Roh stránky chybí
+
+Kryt třecí nádrže byl ráno posunutý. 
+
+Vypustil jsem polovinu vody. Kdyz jsem se vratil byla hladina nahoře. Nejspíš jsem nádrž doplnil a nepamatuji se.
+
+Filtr jsem vypnul. Voda se ale stále pohybuje. Jikry pomalu krouží ve víru.
+
+Dnes už kryt neotevřu.
+
+Poznámka na okraji: Zavolat Evě hned ráno. Tentokrát opravdu.
+
+
+DALŠÍ TEXTY DENÍKU
+
+Označení nápovědy: Poznámka na okraji
+Název dosud neodemčené kapitoly: Chybějící stránka

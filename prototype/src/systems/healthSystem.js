@@ -1,4 +1,6 @@
 import { diseaseDatabase, symptomDatabase, troubleSources } from "../data/healthData.js";
+import { healthTuning } from "../config/fishConfig.js";
+import { pedigreeConfig } from "../config/geneticsConfig.js";
 
 let contagionTimer = 0;
 
@@ -42,21 +44,25 @@ export function updateTroubleEffects(item) {
   item.visibleStress = Math.min(100, item.stress + stressPenalty);
 }
 
-export function updateDiseases(item, delta, tanks, addLog) {
+export function updateDiseases(item, elapsedDays, tanks, addLog) {
   for (const diseaseCase of [...item.diseases]) {
     const disease = diseaseDatabase[diseaseCase.id];
     if (!disease) continue;
+    if ((diseaseCase.treatmentTime ?? 0) > 2) diseaseCase.treatmentTime = healthTuning.treatmentLegacyCapDays;
 
     const waterQuality = tanks[item.tank].waterQuality;
-    const robustFactor = item.traits.includes("robustni") ? 0.55 : 1;
+    const robustFactor = item.traits.includes("robustni") ? healthTuning.robustDiseaseFactor : 1;
     const goodWaterRecovery = waterQuality > 0.88 ? disease.goodWaterBonus : 0;
     const treatmentStrength = diseaseCase.treatmentTime > 0 ? disease.treatmentRate : 0;
     const quarantineFactor = item.tank === "quarantine" ? disease.quarantineBonus : 1;
-    const progress = disease.progressRate * robustFactor * (1.05 - waterQuality);
+    const immunity = Math.max(0, Math.min(100, item.geneticHealth?.immunity ?? pedigreeConfig.founderStats.immunity));
+    const immunityFactor = pedigreeConfig.diseaseProgressAtZeroImmunity
+      + (pedigreeConfig.diseaseProgressAtFullImmunity - pedigreeConfig.diseaseProgressAtZeroImmunity) * immunity / 100;
+    const progress = disease.progressRate * robustFactor * immunityFactor * (1.05 - waterQuality);
     const recovery = disease.recoveryRate * goodWaterRecovery + treatmentStrength * quarantineFactor;
 
-    diseaseCase.severity += (progress - recovery) * delta;
-    diseaseCase.treatmentTime = Math.max(0, diseaseCase.treatmentTime - delta);
+    diseaseCase.severity += (progress - recovery) * elapsedDays;
+    diseaseCase.treatmentTime = Math.max(0, diseaseCase.treatmentTime - elapsedDays);
     diseaseCase.severity = Math.max(0, Math.min(100, diseaseCase.severity));
 
     const stageName = getDiseaseStage(disease, diseaseCase.severity).name;
@@ -90,9 +96,9 @@ export function hasBreedingBlock(item) {
   });
 }
 
-export function spreadContagiousDiseases(delta, fish, addLog) {
-  contagionTimer += delta;
-  if (contagionTimer < 3.5) return;
+export function spreadContagiousDiseases(elapsedDays, fish, addLog) {
+  contagionTimer += elapsedDays;
+  if (contagionTimer < healthTuning.contagiousCheckDays) return;
   contagionTimer = 0;
 
   for (const sourceFish of fish) {
@@ -109,10 +115,10 @@ export function spreadContagiousDiseases(delta, fish, addLog) {
           !item.diseases.some((activeCase) => activeCase.id === diseaseCase.id)
       );
       if (candidates.length === 0) continue;
-      if (Math.random() > 0.22) continue;
+      if (Math.random() > healthTuning.contagiousChance) continue;
 
       const target = candidates[Math.floor(Math.random() * candidates.length)];
-      infectFish(target, diseaseCase.id, 18);
+      infectFish(target, diseaseCase.id, healthTuning.diseaseTransmissionSeverity);
       addLog(`${target.name}: mozne nakazeni od ${sourceFish.name}.`);
     }
   }
@@ -122,11 +128,11 @@ export function exposeTankToTrouble(sourceId, fish, currentTank, addLog) {
   const source = troubleSources[sourceId];
   if (!source || Math.random() > source.chance) return false;
 
-  const vulnerableFish = fish.filter((item) => item.tank === currentTank && item.symptoms.length < 2);
+  const vulnerableFish = fish.filter((item) => item.tank === currentTank && item.symptoms.length < healthTuning.maxPassiveSymptoms);
   if (vulnerableFish.length === 0) return false;
 
   const target = vulnerableFish[Math.floor(Math.random() * vulnerableFish.length)];
-  if (source.diseases && source.diseases.length > 0 && Math.random() < 0.65) {
+  if (source.diseases && source.diseases.length > 0 && Math.random() < healthTuning.sourceDiseaseChance) {
     const diseaseId = source.diseases[Math.floor(Math.random() * source.diseases.length)];
     infectFish(target, diseaseId, 14);
     addLog(`${source.log} ${target.name}: sledovat v karantene.`);
@@ -148,7 +154,7 @@ export function addSymptom(item, symptomId) {
 export function infectFish(item, diseaseId, severity) {
   const activeCase = item.diseases.find((diseaseCase) => diseaseCase.id === diseaseId);
   if (activeCase) {
-    activeCase.severity = Math.min(100, activeCase.severity + severity * 0.5);
+    activeCase.severity = Math.min(100, activeCase.severity + severity * healthTuning.reinfectionSeverityFactor);
     return;
   }
 
@@ -169,14 +175,14 @@ export function describeHealth(item) {
     return getDiseaseStage(disease, diseaseCase.severity).observation;
   }
   if (item.symptoms.length > 0) return symptomDatabase[item.symptoms[0]].observation;
-  if (item.health < 45) return "Vypada spatne.";
-  if (item.health < 70) return item.healthNote || "Nevypada uplne dobre.";
+  if (item.health < healthTuning.healthLabels.badBelow) return "Vypada spatne.";
+  if (item.health < healthTuning.healthLabels.reducedBelow) return item.healthNote || "Nevypada uplne dobre.";
   return item.healthNote || "Vypada dobre.";
 }
 
 export function describeStress(stress) {
-  if (stress < 20) return "Klidna";
-  if (stress < 55) return "Neklidna";
+  if (stress < healthTuning.stressLabels.calmBelow) return "Klidna";
+  if (stress < healthTuning.stressLabels.uneasyBelow) return "Neklidna";
   return "Vystresovana";
 }
 

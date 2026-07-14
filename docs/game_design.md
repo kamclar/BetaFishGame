@@ -477,6 +477,29 @@ Moje poznamky pro pribeh:
 - vzacne druhy, ktere nevzniknou nahodne
 - podivne nabidky pri prodejni udalosti
 
+### Denik jako pruvodce
+
+Denik ma dve oddelene vrstvy:
+
+- pribehove stranky byvaleho chovatele, ktere uci hrace pecovat o nadrz a zaroven odhaluji tajemstvi jezirkove linie
+- bezne zaznamy hrace, vysledky testu, narozeni, nemoci a prodeje
+
+Stranky se neodemykaji jen postupem dni. Podminkou muze byt prvni test vody, dosazeni stabilni nadrze, narozeni konkretniho krizence, nocni pozorovani nebo nalezeni eldritch znaku. Kazda stranka obsahuje praktickou stopu k dalsimu objevu.
+
+Prvni pribehovy oblouk:
+
+1. hrac zdedi nadrz a utrzene poznamky neznameho chovatele
+2. nauci se dusikovy cyklus a vytvori prvni stabilni ekosystem
+3. zjisti, ze predchozi chovatel zatajil rybu z lesniho jezirka
+4. stabilni voda zacne odemykat neobvykle dedicne projevy
+5. zakaznici a stary zverimexar postupne ukazou, ze po teto linii nekdo patra
+
+### Chemie vody a homeostaza
+
+Nadrz sleduje pH, amoniak, dusitany a dusicnany. Odpad ryb a zbytky krmeni zvysuji amoniak. Zabehnuty filtr jej pres dusitany prevadi na dusicnany. Rostliny spotrebovavaji cast amoniaku a dusicnanu podle velikosti a kondice. Dusicnany se bez dostatku rostlin a castecnych vymen vody dlouhodobe hromadi.
+
+Idealni stav neni sterilni nadrz, ale stabilni rovnovaha mezi poctem ryb, krmenim, filtrem, rostlinami a pravidelnou castecnou vymenou vody. Odkalovani odstranuje pevny kal lokalne; vymena vody je samostatna cinnost a snizuje rozpustene latky v cele nadrzi.
+
 ## Recepty a objevovani
 
 Nove druhy lze ziskat ruznymi cestami:

@@ -1,4 +1,5 @@
 import { categoryName } from "../data/speciesData.js";
+import { contractConfig } from "../config/economyConfig.js";
 
 const colors = { blue: "modrou", amber: "medovou", violet: "fialovou", pale: "světlou", black: "černou" };
 const tails = { short: "krátkými ploutvemi", fork: "vidlicovým ocasem", veil: "závojovým ocasem" };
@@ -7,13 +8,13 @@ const patterns = { plain: "bez kresby", spots: "se skvrnami", stripe: "s pruhy",
 export function ensureContract(economy) {
   if (economy.contract) return economy.contract;
   const choices = [
-    () => ({ key: "color", value: randomKey(colors), reward: 42 }),
-    () => ({ key: "tail", value: randomKey(tails), reward: 48 }),
-    () => ({ key: "pattern", value: randomKey(patterns), reward: 54 }),
-    () => ({ key: "category", value: ["shoaling", "labyrinth", "bottom", "cave"][Math.floor(Math.random() * 4)], reward: 60 }),
+    () => ({ key: "color", value: randomKey(colors), reward: contractConfig.rewards.color }),
+    () => ({ key: "tail", value: randomKey(tails), reward: contractConfig.rewards.tail }),
+    () => ({ key: "pattern", value: randomKey(patterns), reward: contractConfig.rewards.pattern }),
+    () => ({ key: "category", value: contractConfig.categories[Math.floor(Math.random() * contractConfig.categories.length)], reward: contractConfig.rewards.category }),
   ];
   const requirement = choices[Math.floor(Math.random() * choices.length)]();
-  economy.contract = { ...requirement, minHealth: 75, completed: false };
+  economy.contract = { ...requirement, minHealth: contractConfig.minimumHealth, completed: false };
   return economy.contract;
 }
 
@@ -28,13 +29,13 @@ export function contractText(contract) {
 
 export function recordContractSale(item, economy) {
   const contract = ensureContract(economy);
-  if ((item.health ?? 0) < contract.minHealth || item.diseases?.length || item[contract.key] !== contract.value) return 0;
+  if ((item.health ?? 0) < contract.minHealth || item.diseases?.length || item[contract.key] !== contract.value) return null;
   const reward = contract.reward;
   economy.coins += reward;
   economy.completedContracts = (economy.completedContracts ?? 0) + 1;
   economy.contract = null;
   ensureContract(economy);
-  return reward;
+  return { reward, skillXp: contractConfig.skillXp };
 }
 
 function randomKey(object) {

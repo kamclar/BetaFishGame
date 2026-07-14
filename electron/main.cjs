@@ -1,14 +1,18 @@
-const { app, BrowserWindow, Menu, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, screen } = require("electron");
 const path = require("path");
 
 let mainWindow;
 
 function createWindow() {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const windowWidth = Math.min(1240, Math.max(960, Math.floor(workArea.width * 0.9)));
+  const windowHeight = Math.min(840, Math.max(680, Math.floor(workArea.height * 0.88)));
   mainWindow = new BrowserWindow({
-    width: 1060,
-    height: 620,
-    minWidth: 720,
-    minHeight: 520,
+    width: windowWidth,
+    height: windowHeight,
+    minWidth: 820,
+    minHeight: 600,
+    center: true,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",

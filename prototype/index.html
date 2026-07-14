@@ -21,8 +21,18 @@
     </header>
     <div id="heldCursor" class="held-cursor" aria-hidden="true"></div>
     <main class="app-shell desktop-tank-mode">
+      <aside class="tutorial-panel" id="tutorialPanel" aria-live="polite" hidden>
+        <button class="tutorial-skip" id="tutorialSkip" type="button"></button>
+        <p class="tutorial-progress" id="tutorialProgress"></p>
+        <h2 id="tutorialTitle"></h2>
+        <p id="tutorialText"></p>
+        <button class="tutorial-continue" id="tutorialContinue" type="button"></button>
+      </aside>
       <section class="aquarium-panel" aria-label="Akvarium">
-        <div class="top-bar">
+        <button class="hud-toggle" id="hudToggle" type="button" aria-expanded="false" aria-controls="topHud" title="Otevřít horní panel">
+          <span class="sr-only">Otevřít horní panel</span>
+        </button>
+        <div class="top-bar" id="topHud">
           <div>
             <p class="eyebrow" id="tankLabel">Domaci nadrz</p>
             <h1 id="tankName">Tiche akvarium</h1>
@@ -38,7 +48,9 @@
               <span id="gameDay">Den 1</span>
               <span id="gameTime">08:00</span>
               <span id="waterQuality">Voda: dobra</span>
+              <span id="waterReadings">Test vody: neproveden</span>
               <span id="coinCount">36 penez</span>
+              <span id="skillStatus">Zkus. 0 · Ucen</span>
               <span id="currentTask">Nakrm ryby 0/2</span>
               <span id="customerContract">Zakazka se pripravuje</span>
             </div>
@@ -55,7 +67,7 @@
           </button>
           <button class="shelf-item" type="button" data-action="test" title="Zmer vodu">
             <span class="jar test"></span>
-            <span>Test pH</span>
+            <span>Test vody</span>
           </button>
           <button class="shelf-item" type="button" data-action="plant" title="Pridat rostlinu">
             <span class="jar plant"></span>
@@ -65,9 +77,13 @@
             <span class="jar medicine"></span>
             <span>Lek</span>
           </button>
-          <button class="shelf-item" type="button" data-action="clean" title="Odcistit dno a vymenit cast vody">
+          <button class="shelf-item" type="button" data-action="clean" title="Odsat kal ze dna">
             <span class="jar clean"></span>
             <span>Uklid</span>
+          </button>
+          <button class="shelf-item" type="button" data-action="water-change" title="Vymenit tretinu vody">
+            <span class="jar water-change"></span>
+            <span>Vymena vody</span>
           </button>
           <button class="shelf-item" type="button" data-action="scrape" title="Seskrabat rasy ze skla">
             <span class="scraper-icon"></span><span>Skrabka</span>
@@ -93,12 +109,18 @@
 
       <aside class="side-panel" aria-label="Detail ryby">
         <div class="card fish-card">
-          <button type="button" id="fishCardCloseButton" class="journal-close">×</button>
+          <button type="button" id="fishCardCloseButton" class="journal-close" aria-label="Zavrit">X</button>
           <p class="eyebrow">Karta ryby</p>
           <h2 id="fishName">Vyber rybu</h2>
           <p id="fishSpecies" class="muted">Klikni na rybu v akvariu.</p>
 
-          <dl class="fish-data">
+          <div class="fish-card-tabs">
+            <button type="button" class="active" data-fish-page="overview">Prehled</button>
+            <button type="button" data-fish-page="pedigree">Rodokmen</button>
+            <button type="button" data-fish-page="atlas">Atlas</button>
+          </div>
+
+          <dl class="fish-data" data-card-page="overview">
             <div>
               <dt>Pozorovani</dt>
               <dd id="fishHealth">-</dd>
@@ -121,52 +143,85 @@
             </div>
             <div><dt>Pohlavi</dt><dd id="fishSex">-</dd></div>
             <div><dt>Kategorie</dt><dd id="fishCategory">-</dd></div>
+            <div><dt>Chovani</dt><dd id="fishBehavior">-</dd></div>
             <div><dt>Rodice</dt><dd id="fishParents">-</dd></div>
             <div><dt>Potomci</dt><dd id="fishOffspring">-</dd></div>
           </dl>
 
-          <div class="trait-list" id="traitList"></div>
-          <div class="symptom-list" id="symptomList"></div>
+          <div class="trait-list" id="traitList" data-card-page="overview"></div>
+          <div class="symptom-list" id="symptomList" data-card-page="overview"></div>
 
-          <div class="fish-actions">
+          <div class="fish-actions" data-card-page="overview">
             <button type="button" id="moveFishButton">Presunout do karanteny</button>
             <button type="button" id="treatFishButton">Pouzit lek</button>
             <button type="button" id="breedFishButton">Presunout do treni</button>
             <button type="button" id="sellFishButton">Pripravit k prodeji</button>
           </div>
 
-          <div class="fish-history">
+          <div class="fish-history" data-card-page="overview">
             <p class="eyebrow">Historie ryby</p>
             <ul id="fishHistory"></ul>
           </div>
+          <div class="pedigree-page" id="pedigreePage" data-card-page="pedigree"></div>
+          <div class="atlas-page" id="atlasPage" data-card-page="atlas"></div>
         </div>
       </aside>
 
       <section class="card journal-panel" aria-label="Denicek">
-        <button type="button" id="journalCloseButton" class="journal-close">×</button>
+        <button type="button" id="journalCloseButton" class="journal-close" aria-label="Zavrit">X</button>
         <p class="eyebrow">Denicek</p>
-        <div class="journal-summary"><span id="journalCount">0 zaznamu</span><span class="important-key">◆ dulezite</span></div>
-        <ul id="journalLog"></ul>
+        <div class="journal-tabs">
+          <button type="button" class="active" data-journal-page="story">Pribeh</button>
+          <button type="button" data-journal-page="records">Zaznamy</button>
+        </div>
+        <div class="journal-page story-page" data-journal-content="story">
+          <p class="journal-intro">Stranky stareho chovatele se doplnuji podle toho, co v akvariu objevis.</p>
+          <div id="storyChapters"></div>
+        </div>
+        <div class="journal-page records-page" data-journal-content="records">
+          <div class="journal-summary"><span id="journalCount">0 zaznamu</span><span class="important-key">* dulezite</span></div>
+          <div class="daily-goals">
+            <p class="eyebrow">Dnesni cile</p>
+            <ul id="dailyGoalList"></ul>
+          </div>
+          <ul id="journalLog"></ul>
+        </div>
       </section>
       <section class="shop-panel" aria-label="Obchod">
-        <button type="button" id="shopCloseButton" class="journal-close">Ã—</button>
+        <button type="button" id="shopCloseButton" class="journal-close" aria-label="Zavrit">X</button>
         <p class="eyebrow">Akvaristicky obchod</p>
         <div class="shop-balance" id="shopBalance">0 penez</div>
+        <div class="shop-skill" id="shopSkill">Ucen · zkusenost 0/8</div>
         <div class="shop-grid">
-          <button type="button" id="buyFoodButton" class="shop-product">
+          <button type="button" id="buyFoodButton" class="shop-product" data-shop-item="food" data-price="10 penez">
             <span class="shop-product-icon jar flakes"></span>
             <span><strong>Krabicka vlocek</strong><small>Obsahuje 12 krmnych davek.</small></span>
             <b>10 penez</b>
           </button>
-          <button type="button" id="buySnailButton" class="shop-product">
+          <button type="button" id="buySnailButton" class="shop-product" data-shop-item="snail" data-price="45 penez">
             <span class="shop-product-icon snail-icon">@</span>
             <span><strong>Ampularie</strong><small>Pomalu spasa rasy ze skla.</small></span>
             <b>45 penez</b>
           </button>
-          <button type="button" id="buyEggsButton" class="shop-product">
+          <button type="button" id="buyEggsButton" class="shop-product" data-shop-item="eggs" data-price="28 penez">
             <span class="shop-product-icon egg-icon">••</span>
             <span><strong>Jikry nezname linie</strong><small>Vlozi se do treci nadrze. Vylihne se 1–2 rybky.</small></span>
             <b>28 penez</b>
+          </button>
+          <button type="button" id="buyFilterButton" class="shop-product" data-shop-item="filter" data-price="65 penez">
+            <span class="shop-product-icon filter-icon">II</span>
+            <span><strong>Tichy filtr II</strong><small>Zpomali zhorsovani vody a usazovani necistot.</small></span>
+            <b>65 penez</b>
+          </button>
+          <button type="button" id="buyHeaterButton" class="shop-product" data-shop-item="heater" data-price="55 penez">
+            <span class="shop-product-icon heater-icon">25</span>
+            <span><strong>Topitko s termostatem</strong><small>Drzi teplotu nadrze kolem 25 C.</small></span>
+            <b>55 penez</b>
+          </button>
+          <button type="button" id="buyAeratorButton" class="shop-product" data-shop-item="aerator" data-price="48 penez">
+            <span class="shop-product-icon aerator-icon">oO</span>
+            <span><strong>Vzduchovani</strong><small>Zveda obsah kysliku hlavne v noci a pri prelidneni.</small></span>
+            <b>48 penez</b>
           </button>
         </div>
       </section>

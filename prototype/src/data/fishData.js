@@ -13,6 +13,7 @@ export const palette = {
   cobalt: ["#356dff", "#142d85", "#a9c5ff"],
   magenta: ["#ed45c7", "#72165e", "#ffb8ec"],
   turquoise: ["#19d5c5", "#075f67", "#a6fff5"],
+  eldritch: ["#4b2373", "#150c25", "#b77ae8"],
 };
 
 export const fish = [
@@ -283,6 +284,28 @@ export const fish = [
   },
 ];
 
+const starterSchool = [
+  ["f-school-2", "Trpytka", 245, 225, -1, "turquoise", "plain", 10],
+  ["f-school-3", "Carka", 305, 275, 1, "blue", "stripe", 14],
+  ["f-school-4", "Bublinka", 155, 315, 1, "cobalt", "spots", 18],
+  ["f-school-5", "Mihotka", 265, 345, -1, "pale", "plain", 9],
+];
+
+export function ensureStarterSchool(items = fish) {
+  for (const [id, name, x, y, dir, color, pattern, ageDays] of starterSchool) {
+    if (items.some((item) => item.id === id)) continue;
+    items.push({
+    id, name, species: "Sklenena strelka", rarity: "Common", age: `${ageDays} dni`, ageDays,
+    health: 94, stress: 6, hunger: 26, healthNote: "Drzi se ostatnich rybek sveho druhu.",
+    symptoms: [], diseases: [], history: ["Pochazi z prvniho maleho hejna."], traits: ["klidna"],
+    tank: "main", x, y, speed: 36 + (ageDays % 3), dir, size: 1.08 + (ageDays % 4) * 0.025,
+    color, tail: "short", pattern, specialSprite: "glassArrow", phase: ageDays * 0.37,
+    });
+  }
+}
+
+ensureStarterSchool();
+
 export const plants = {
   main: [
   createPlant("vallisneria", 80, 112, 0),
@@ -305,23 +328,27 @@ export const tanks = {
     debris: 0.42,
     brownWater: 0.3,
     algae: 0.48,
+    filterLevel: 1,
   },
   quarantine: {
     label: "Karantena",
     name: "Mala izolacni nadrz",
     plantTrouble: null,
     waterQuality: 0.9,
+    filterLevel: 1,
   },
   nursery: {
     label: "Chov",
     name: "Treci nadrz",
     plantTrouble: null,
     waterQuality: 0.94,
+    filterLevel: 1,
   },
   sale: {
     label: "Prodejni mistnost",
     name: "Prodejni nadrz",
     plantTrouble: null,
     waterQuality: 0.9,
+    filterLevel: 1,
   },
 };

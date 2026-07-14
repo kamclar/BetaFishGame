@@ -14,7 +14,7 @@ export const csTutorial = {
   },
   test_water: {
     title: "Vodu nejde poznat pohledem",
-    text: "Vedle krmení leží testovací sada. Víčko je odřené častým používáním. Vezmi ji a klikni do nádrže.",
+    text: "Vedle krmení leží testovací sada. Víčko je odřené častým používáním. Vezmi zkumavku a podrž ji ve vodě, dokud se nenaplní.",
   },
   read_test: {
     title: "Čísla na štítku",

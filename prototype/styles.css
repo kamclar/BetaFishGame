@@ -1476,6 +1476,74 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
 
 #maintenanceStatus { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
 
+.held-cursor.test::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  bottom: -4px;
+  width: 18px;
+  height: calc(var(--sample-fill, 0) * 34px);
+  max-height: 34px;
+  border-radius: 0 0 6px 6px;
+  background: rgba(79, 190, 215, .82);
+  box-shadow: inset 3px 0 0 rgba(199, 244, 244, .28);
+}
+.held-cursor.test::before {
+  left: -12px;
+  top: -53px;
+  width: 24px;
+  height: 50px;
+  border: 3px solid #b7d0cd;
+  border-top: 5px solid #718d8d;
+  border-radius: 2px 2px 8px 8px;
+  background: rgba(179, 229, 231, .12);
+  box-shadow: inset 4px 0 rgba(244,255,250,.3), 3px 3px 0 rgba(0,0,0,.45);
+}
+
+.water-test-tray {
+  position: absolute;
+  z-index: 17;
+  left: 50%;
+  bottom: 94px;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 36px));
+  padding: 14px 16px 15px;
+  border: 4px solid #523a24;
+  border-top-color: #9a7040;
+  background: repeating-linear-gradient(90deg, #251810 0 20px, #2c1c12 20px 40px);
+  box-shadow: inset 0 0 0 2px #17100b, 6px 7px 0 rgba(0,0,0,.62);
+}
+.water-test-tray::after {
+  content: "";
+  position: absolute;
+  right: 52px;
+  top: 16px;
+  width: 55px;
+  height: 8px;
+  border: 2px solid #9bb6b2;
+  border-radius: 5px 1px 1px 5px;
+  background: linear-gradient(90deg, #9b5b7b 0 48%, #d8e2d7 49% 82%, #7fa5a4 83%);
+  transform: rotate(-8deg);
+  image-rendering: pixelated;
+}
+.water-test-tray[hidden] { display: none; }
+.water-test-tray h2 { margin: 2px 0 4px; color: #f0ddb0; font: 700 19px Georgia, serif; }
+.water-test-tray > p:not(.eyebrow) { margin: 0 0 10px; color: #adc0b9; font: 11px Consolas, monospace; }
+.test-tray-close { position: absolute; top: 8px; right: 8px; width: 27px; height: 25px; border: 2px solid #654638; background: #2b1916; color: #d9b0a4; cursor: pointer; }
+.test-vials { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.test-vial { position: relative; display: grid; justify-items: center; gap: 3px; min-height: 103px; padding: 8px 5px 6px; border: 2px solid #465c5d; border-bottom-color: #172426; background: #101d20; color: #bed0c9; cursor: pointer; }
+.test-vial:hover:not(:disabled) { border-color: #d4b45f; background: #192b2d; }
+.test-vial:disabled { cursor: default; }
+.test-vial b { font: 900 10px Consolas, monospace; }
+.test-vial small { color: #7f9994; font: 8px Consolas, monospace; }
+.vial-liquid { position: relative; width: 25px; height: 53px; border: 3px solid #a8c4c1; border-top: 0; border-radius: 0 0 8px 8px; background: linear-gradient(to top, var(--test-color, #70b8c6) 0 55%, rgba(145,210,220,.16) 56%); box-shadow: inset 3px 0 rgba(235,255,250,.22); image-rendering: pixelated; }
+.test-vial.reacting .vial-liquid { animation: reagent-mix 520ms steps(4, end) infinite; }
+.test-vial.developed { border-color: #78946c; background: #17271f; }
+.test-vial.developed small { color: #e3d28e; font-size: 10px; }
+@keyframes reagent-mix { 50% { filter: brightness(1.35) saturate(1.4); transform: translateY(-2px); } }
+.finish-water-test { margin-top: 10px; padding: 8px 13px; border: 2px solid #6e5930; border-bottom-color: #2c200e; background: #b49349; color: #1b160b; font: 900 10px Consolas, monospace; cursor: pointer; }
+.finish-water-test:disabled { border-color: #3d4947; background: #263330; color: #71817d; cursor: default; }
+
 /* Story journal and water chemistry */
 #waterReadings { color: #9bc8bd; font-size: 9px; }
 .journal-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 12px 0; border: 2px solid #38535a; }

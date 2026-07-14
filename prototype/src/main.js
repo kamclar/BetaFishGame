@@ -96,6 +96,9 @@ let maintenanceDragging = false;
 let siphonLoad = 0;
 let lastSiphonCloudAt = 0;
 let lastMaintenancePoint = null;
+let waterTestSession = null;
+let sampleFilling = false;
+let suppressNextCanvasClick = false;
 const foodParticles = [];
 const liquidClouds = [];
 const debugMode = new URLSearchParams(location.search).has("debugTime");
@@ -164,6 +167,16 @@ function update(delta) {
   const elapsedDays = gameDaysElapsed(delta);
   const view = getView();
   if (maintenanceDragging && heldItem === "refill") updateRefill(delta);
+  if (sampleFilling && waterTestSession && !waterTestSession.ready) {
+    waterTestSession.fill = Math.min(1, waterTestSession.fill + delta * 0.48);
+    ui.heldCursor.style.setProperty("--sample-fill", waterTestSession.fill.toFixed(2));
+    if (waterTestSession.fill >= 1) {
+      waterTestSession.ready = true;
+      waterTestSession.result = waterTestResult(tanks[currentTank]);
+      sampleFilling = false;
+      openWaterTestTray();
+    }
+  }
   updateFoodParticles(delta, view);
   updateLiquidClouds(delta);
   updateWorld(delta, tanks, plants, fish, (day) => {
@@ -518,6 +531,7 @@ function startSalesDay() {
 }
 
 canvas.addEventListener("click", (event) => {
+  if (suppressNextCanvasClick) { suppressNextCanvasClick = false; return; }
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
@@ -543,6 +557,7 @@ canvas.addEventListener("click", (event) => {
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    if (!document.getElementById("waterTestTray").hidden) cancelWaterTest();
     setHeldItem(null);
     deselectFish();
     closeJournal();
@@ -579,6 +594,9 @@ window.addEventListener("keydown", (event) => {
 
 document.getElementById("journalCloseButton").addEventListener("click", closeJournal);
 document.getElementById("shopCloseButton").addEventListener("click", closeShop);
+document.getElementById("testTrayClose").addEventListener("click", cancelWaterTest);
+document.getElementById("finishWaterTest").addEventListener("click", finishWaterTest);
+for (const vial of document.querySelectorAll(".test-vial")) vial.addEventListener("click", () => developWaterTest(vial));
 document.getElementById("buyFoodButton").addEventListener("click", buyFood);
 document.getElementById("buySnailButton").addEventListener("click", buySnail);
 document.getElementById("buyEggsButton").addEventListener("click", buyEggs);
@@ -648,6 +666,10 @@ function setHeldItem(action) {
     return;
   }
   if (!action && heldItem === "clean" && !(tanks[currentTank].waterRemoved > 0)) tanks[currentTank].waterChangeActive = false;
+  if (!action && heldItem === "test" && !waterTestSession?.ready) {
+    waterTestSession = null;
+    sampleFilling = false;
+  }
   heldItem = action;
   const maintenanceTool = heldItem === "clean" || heldItem === "scrape" || heldItem === "refill";
   canvas.classList.toggle("maintenance-cursor", maintenanceTool);
@@ -659,7 +681,7 @@ function setHeldItem(action) {
     button.classList.toggle("selected", button.dataset.action === heldItem || (button.dataset.action === "clean" && heldItem === "refill"));
   }
   if (heldItem === "feed") addLog(ui, "V ruce: vlocky. Klikni do vody.");
-  if (heldItem === "test") addLog(ui, "V ruce: test ph. Klikni do vody.");
+  if (heldItem === "test") addLog(ui, "Zkumavka: podrž ji ve vodě, dokud se nenaplní.");
   if (heldItem === "plant") addLog(ui, "V ruce: rostlina. Klikni na misto v nadrzi.");
   if (heldItem === "medicine") addLog(ui, "V ruce: lek. Klikni do vody nebo pouzij kartu ryby.");
   if (heldItem === "clean") {
@@ -675,6 +697,7 @@ function setHeldItem(action) {
     ui.heldCursor.style.setProperty("--siphon-fill", "0px");
   }
   lastMaintenancePoint = null;
+  if (heldItem !== "test") ui.heldCursor.style.setProperty("--sample-fill", "0");
 }
 
 function useHeldItem(x, y) {
@@ -692,14 +715,7 @@ function useHeldItem(x, y) {
   }
 
   if (heldItem === "test") {
-    if (!spendForAction("test")) return;
-    addLiquidCloud(x, y, "148, 103, 184", 18);
-    const result = waterTestResult(tanks[currentTank]);
-    tanks[currentTank].lastTest = result;
-    recordStoryAction(economy, "test");
-    addJournalEntry(ui, `Den ${gameClock.day}: ${tanks[currentTank].name}. ${formatWaterTest(result)}. Voda ${result.quality.toLowerCase()}. Doporuceni: ${waterTestAdvice(result)}`);
-    completeAction("test");
-    unlockStoryChapters();
+    return;
   }
 
   if (heldItem === "plant") {
@@ -792,6 +808,99 @@ function isPointInTank(x, y) {
   const view = getView();
   const glass = getGlassBounds(view);
   return x >= glass.left && x <= glass.right && y >= getSurfaceY(view, tanks[currentTank]) - 12 && y <= view.height - 32;
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (heldItem !== "test") return;
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if (!isPointInTank(x, y)) return;
+  if (!waterTestSession) {
+    if (!spendForAction("test")) return;
+    waterTestSession = { tankId: currentTank, fill: 0, ready: false, developed: new Set() };
+  }
+  if (waterTestSession.tankId !== currentTank) return;
+  sampleFilling = true;
+  canvas.setPointerCapture(event.pointerId);
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  if (!sampleFilling && !waterTestSession?.ready) return;
+  sampleFilling = false;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  if (waterTestSession?.ready) {
+    suppressNextCanvasClick = true;
+    setHeldItem(null);
+  }
+});
+
+function openWaterTestTray() {
+  const tray = document.getElementById("waterTestTray");
+  tray.hidden = false;
+  ui.appShell.classList.remove("show-card", "show-journal", "show-shop");
+  document.getElementById("finishWaterTest").disabled = true;
+  document.getElementById("testTrayInstruction").textContent = "Kapátkem aktivuj každou zkumavku.";
+  for (const vial of tray.querySelectorAll(".test-vial")) {
+    vial.disabled = false;
+    vial.classList.remove("reacting", "developed");
+    vial.querySelector("small").textContent = "přidat činidlo";
+    vial.style.setProperty("--test-color", "#70b8c6");
+  }
+}
+
+function developWaterTest(vial) {
+  if (!waterTestSession?.ready || vial.disabled) return;
+  const key = vial.dataset.testKey;
+  vial.disabled = true;
+  vial.classList.add("reacting");
+  vial.style.setProperty("--test-color", waterTestColor(key, waterTestSession.result[key]));
+  vial.querySelector("small").textContent = "vyvíjí se...";
+  window.setTimeout(() => {
+    if (!waterTestSession) return;
+    vial.classList.remove("reacting");
+    vial.classList.add("developed");
+    vial.querySelector("small").textContent = waterTestValueLabel(key, waterTestSession.result[key]);
+    waterTestSession.developed.add(key);
+    if (waterTestSession.developed.size === 4) {
+      document.getElementById("finishWaterTest").disabled = false;
+      document.getElementById("testTrayInstruction").textContent = "Barvy jsou ustálené. Výsledky můžeš zapsat.";
+    }
+  }, 650);
+}
+
+function finishWaterTest() {
+  if (!waterTestSession || waterTestSession.developed.size < 4) return;
+  const result = waterTestSession.result;
+  tanks[waterTestSession.tankId].lastTest = result;
+  recordStoryAction(economy, "test");
+  addJournalEntry(ui, `Den ${gameClock.day}: ${tanks[waterTestSession.tankId].name}. ${formatWaterTest(result)}. Voda ${result.quality.toLowerCase()}. Doporučení: ${waterTestAdvice(result)}`);
+  completeAction("test");
+  waterTestSession = null;
+  document.getElementById("waterTestTray").hidden = true;
+  if (selectedFish) ui.appShell.classList.add("show-card");
+  unlockStoryChapters();
+}
+
+function cancelWaterTest() {
+  waterTestSession = null;
+  sampleFilling = false;
+  document.getElementById("waterTestTray").hidden = true;
+  setHeldItem(null);
+  if (selectedFish) ui.appShell.classList.add("show-card");
+}
+
+function waterTestValueLabel(key, value) {
+  if (key === "ph") return `pH ${value}`;
+  return `${value} mg/l`;
+}
+
+function waterTestColor(key, value) {
+  const number = Number(value);
+  if (key === "ph") return number < 6.8 ? "#d6b54d" : number > 7.6 ? "#7164b8" : "#62a879";
+  if (key === "ammonia") return number >= 0.1 ? "#69a84d" : "#e3d75c";
+  if (key === "nitrite") return number >= 0.1 ? "#a058a5" : "#8ec2d0";
+  return number >= 30 ? "#c65a45" : number >= 15 ? "#d79548" : "#e1c85c";
 }
 
 function updateRefill(delta) {

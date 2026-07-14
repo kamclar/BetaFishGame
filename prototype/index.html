@@ -28,6 +28,19 @@
         <p id="tutorialText"></p>
         <button class="tutorial-continue" id="tutorialContinue" type="button"></button>
       </aside>
+      <section class="water-test-tray" id="waterTestTray" aria-label="Testovací sada" hidden>
+        <button type="button" class="test-tray-close" id="testTrayClose" aria-label="Zavřít">X</button>
+        <p class="eyebrow">Vzorek z nádrže</p>
+        <h2>Testovací sada</h2>
+        <p id="testTrayInstruction">Kapátkem aktivuj každou zkumavku.</p>
+        <div class="test-vials">
+          <button type="button" class="test-vial" data-test-key="ph"><span class="vial-liquid"></span><b>pH</b><small>přidat činidlo</small></button>
+          <button type="button" class="test-vial" data-test-key="ammonia"><span class="vial-liquid"></span><b>NH3</b><small>přidat činidlo</small></button>
+          <button type="button" class="test-vial" data-test-key="nitrite"><span class="vial-liquid"></span><b>NO2</b><small>přidat činidlo</small></button>
+          <button type="button" class="test-vial" data-test-key="nitrate"><span class="vial-liquid"></span><b>NO3</b><small>přidat činidlo</small></button>
+        </div>
+        <button type="button" id="finishWaterTest" class="finish-water-test" disabled>Zapsat výsledky</button>
+      </section>
       <section class="aquarium-panel" aria-label="Akvarium">
         <button class="hud-toggle" id="hudToggle" type="button" aria-expanded="false" aria-controls="topHud" title="Otevřít horní panel">
           <span class="sr-only">Otevřít horní panel</span>

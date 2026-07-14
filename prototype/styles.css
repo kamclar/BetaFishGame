@@ -693,6 +693,20 @@ h2 {
   background-image: url("./assets/items/item_siphon.png");
 }
 
+.jar.clean::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 3px;
+  height: var(--bucket-fill, 0%);
+  max-height: 30px;
+  border-radius: 2px 2px 7px 7px;
+  background: linear-gradient(to top, rgba(78, 48, 25, .92), rgba(133, 91, 49, .72));
+  opacity: .9;
+  pointer-events: none;
+}
+
 .quarantine {
   background: linear-gradient(#253034 35%, #385d72 36%);
 }
@@ -1430,15 +1444,40 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
   50% { background-position: 4px -5px, -3px -7px, 5px -3px, 0 0; }
 }
 
+.held-cursor.refill { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+.held-cursor.refill::before {
+  content: "";
+  position: absolute;
+  left: -38px;
+  top: -54px;
+  width: 58px;
+  height: 45px;
+  border: 4px solid #587c82;
+  border-top-color: #9fc2c0;
+  border-radius: 5px 5px 13px 13px;
+  background:
+    linear-gradient(to top, #318ca5 0 58%, transparent 59%),
+    repeating-linear-gradient(90deg, #28484e 0 5px, #345b61 5px 10px);
+  box-shadow: inset 0 -5px 0 #173a43, 3px 4px 0 rgba(0,0,0,.45);
+  image-rendering: pixelated;
+}
+.held-cursor.refill::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -17px;
+  width: 10px;
+  height: 48px;
+  background: repeating-linear-gradient(0deg, rgba(116,213,229,.9) 0 5px, rgba(63,158,184,.8) 5px 9px);
+  opacity: 0;
+}
+.held-cursor.refill.working::after { opacity: 1; animation: refill-stream 280ms steps(2, end) infinite; }
+@keyframes refill-stream { 50% { transform: translateX(2px); } }
+
+#maintenanceStatus { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
+
 /* Story journal and water chemistry */
 #waterReadings { color: #9bc8bd; font-size: 9px; }
-.water-change {
-  background:
-    linear-gradient(to top, rgba(56, 139, 163, .9) 0 52%, transparent 53%),
-    linear-gradient(90deg, transparent 18%, #a9c8c5 19% 28%, transparent 29% 71%, #a9c8c5 72% 81%, transparent 82%);
-  border: 2px solid #739a98;
-  box-shadow: inset 0 -4px 0 rgba(23, 66, 78, .8);
-}
 .journal-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 12px 0; border: 2px solid #38535a; }
 .journal-tabs button { padding: 7px; border: 0; border-right: 1px solid #38535a; background: #0d1c20; color: #799592; font: 900 10px Consolas, monospace; cursor: pointer; }
 .journal-tabs button:last-child { border-right: 0; }

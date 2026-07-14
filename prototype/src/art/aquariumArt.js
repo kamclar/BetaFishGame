@@ -98,37 +98,39 @@ function findEyeHoles(image, original) {
 export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   if (tankId === "sale") drawCustomers(ctx, view, tank);
   const glass = getGlassBounds(view);
-  const surfaceY = getSurfaceY(view);
+  const surfaceY = getSurfaceY(view, tank);
   ctx.save();
   ctx.beginPath();
   ctx.rect(glass.left, surfaceY - 4, glass.width, view.height - surfaceY - 16);
   ctx.clip();
-  drawWater(ctx, view, tankId);
+  drawWater(ctx, view, tankId, tank);
   drawTankFilter(ctx, view, tank);
-  drawPlants(ctx, view, plants);
+  drawPlants(ctx, view, plants, tank);
   if (tankId === "nursery" && tank?.spawning?.eggs) drawEggClutch(ctx, view, tank.spawning.eggs);
   drawTankDirt(ctx, view, tank);
   drawSnails(ctx, view, tank);
-  drawBubbles(ctx, view);
+  drawBubbles(ctx, view, tank);
   ctx.restore();
+  drawWaterChangeGuide(ctx, view, tank);
 }
 
-export function drawDayNightOverlay(ctx, view, lightLevel, period) {
+export function drawDayNightOverlay(ctx, view, lightLevel, period, tank = null) {
+  const surfaceY = getSurfaceY(view, tank);
   const darkness = Math.max(0, Math.min(dayNightConfig.nightOverlayMax, (1 - lightLevel) * dayNightConfig.nightOverlayMax));
   if (darkness > 0.01) {
-    const gradient = ctx.createLinearGradient(0, getSurfaceY(view), 0, view.height);
+    const gradient = ctx.createLinearGradient(0, surfaceY, 0, view.height);
     gradient.addColorStop(0, `rgba(13, 25, 57, ${darkness * 0.72})`);
     gradient.addColorStop(1, `rgba(4, 10, 29, ${darkness})`);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, getSurfaceY(view) - 5, view.width, view.height - getSurfaceY(view) + 5);
+    ctx.fillRect(0, surfaceY - 5, view.width, view.height - surfaceY + 5);
   }
   if (period === "svitani" || period === "soumrak") {
-    const glow = ctx.createLinearGradient(0, getSurfaceY(view), view.width, getSurfaceY(view));
+    const glow = ctx.createLinearGradient(0, surfaceY, view.width, surfaceY);
     glow.addColorStop(0, "rgba(222, 153, 84, 0)");
     glow.addColorStop(0.5, "rgba(222, 153, 84, 0.11)");
     glow.addColorStop(1, "rgba(222, 153, 84, 0)");
     ctx.fillStyle = glow;
-    ctx.fillRect(0, getSurfaceY(view), view.width, view.height - getSurfaceY(view));
+    ctx.fillRect(0, surfaceY, view.width, view.height - surfaceY);
   }
 }
 
@@ -302,9 +304,9 @@ export function drawGlassAlgae(ctx, view, tank) {
   const glass = getGlassBounds(view);
   const map = tank.algaeMap;
   if (Array.isArray(map) && map.length === 32 * 18) {
-    const top = getSurfaceY(view) + 5;
+    const top = getSurfaceY(view, tank) + 5;
     const width = glass.width - 10;
-    const height = view.height - getSurfaceY(view) - 30;
+    const height = view.height - getSurfaceY(view, tank) - 30;
     const mask = document.createElement("canvas");
     mask.width = 32; mask.height = 18;
     const maskCtx = mask.getContext("2d");
@@ -439,8 +441,10 @@ export function maskAquariumEdges(ctx, view) {
   ctx.clearRect(innerRight, 0, Math.max(0, view.width - innerRight), view.height);
 }
 
-export function getSurfaceY(view) {
-  return Math.max(90, Math.min(140, view.height * 0.24));
+export function getSurfaceY(view, tank = null) {
+  const fullSurface = Math.max(90, Math.min(140, view.height * 0.24));
+  const fraction = Math.max(0, Math.min(0.5, tank?.waterRemoved ?? 0));
+  return fullSurface + (view.height - 52 - fullSurface) * fraction;
 }
 
 export function getGlassBounds(view) {
@@ -455,9 +459,30 @@ export function getGlassBounds(view) {
   };
 }
 
+function drawWaterChangeGuide(ctx, view, tank) {
+  if (!tank?.waterChangeActive && !(tank?.waterRemoved > 0)) return;
+  const glass = getGlassBounds(view);
+  const fullSurface = getSurfaceY(view);
+  const depth = view.height - 52 - fullSurface;
+  const marks = [[0.25, "25 %"], [0.35, "35 %"], [0.5, "MAX"]];
+  ctx.save();
+  ctx.font = "bold 9px Consolas, monospace";
+  ctx.textAlign = "right";
+  for (const [fraction, label] of marks) {
+    const y = fullSurface + depth * fraction;
+    const recommended = fraction <= 0.35;
+    ctx.strokeStyle = recommended ? "rgba(225, 204, 124, .72)" : "rgba(190, 104, 104, .72)";
+    ctx.fillStyle = recommended ? "rgba(244, 226, 159, .9)" : "rgba(225, 143, 143, .9)";
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.moveTo(glass.right - 92, y); ctx.lineTo(glass.right - 14, y); ctx.stroke();
+    ctx.fillText(label, glass.right - 18, y - 4);
+  }
+  ctx.restore();
+}
 
-function drawWater(ctx, view, tankId) {
-  const surfaceY = getSurfaceY(view);
+
+function drawWater(ctx, view, tankId, tank) {
+  const surfaceY = getSurfaceY(view, tank);
   const glass = getGlassBounds(view);
   const gradient = ctx.createLinearGradient(0, surfaceY, 0, view.height);
   const water = tankId === "quarantine"
@@ -525,8 +550,8 @@ function drawBottomDecor(ctx, view, tankId) {
   drawCoral(ctx, gl.right - 64, bottom, "#be3c52");
 }
 
-function drawPlants(ctx, view, plants) {
-  const surfaceY = getSurfaceY(view);
+function drawPlants(ctx, view, plants, tank) {
+  const surfaceY = getSurfaceY(view, tank);
   for (const plant of plants) {
     const baseY = view.height - 46;
     const type = plantTypes[plant.type] ?? plantTypes.vallisneria;
@@ -609,9 +634,9 @@ function drawFernPlant(ctx, x, baseY, topY, time, colors) {
   }
 }
 
-function drawBubbles(ctx, view) {
+function drawBubbles(ctx, view, tank) {
   const now = performance.now() / 900;
-  const surfaceY = getSurfaceY(view);
+  const surfaceY = getSurfaceY(view, tank);
   ctx.strokeStyle = "rgba(190, 236, 239, 0.42)";
   for (let i = 0; i < 22; i += 1) {
     const x = 40 + ((i * 97) % Math.max(80, view.width - 80));

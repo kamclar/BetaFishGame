@@ -3,6 +3,7 @@ export const waterConfig = {
   defaults: { ph: 7.2, temperature: 24.8, hardness: 7, oxygen: 7.6, capacity: 12, lightStrength: 1 },
   tapWater: { ph: 7.2, hardness: 7, oxygen: 8.2 },
   waterChangeFraction: 0.35,
+  maintenance: { recommendedMin: 0.25, recommendedMax: 0.35, maximumDrain: 0.5, drainPerPixel: 0.000075, refillPerSecond: 0.12 },
   bioload: { fishSizeFactor: 0.72, snail: 0.35 },
   filter: { level2WasteFactor: 0.62, level2CycleStrength: 1.65 },
   dirt: {
@@ -29,4 +30,3 @@ export const waterConfig = {
   qualityWeights: { ammonia: 0.34, nitrite: 0.27, nitrate: 0.12, ph: 0.06, oxygen: 0.12, temperature: 0.04, crowding: 0.05 },
   plants: { ageRate: 0.02, growthRate: 0.00045, conditionRate: 0.00035, minimumLightFitness: 0.12 },
 };
-

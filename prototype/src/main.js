@@ -68,6 +68,9 @@ initializeStory(economy);
 for (const [tankId, tank] of Object.entries(tanks)) {
   tank.capacity = waterConfig.capacities[tankId] ?? waterConfig.capacities.fallback;
   ensureWaterChemistry(tank);
+  tank.waterRemoved ??= 0;
+  tank.pendingWaterChange ??= tank.waterRemoved;
+  tank.waterChangeActive ??= false;
   if (tank.lastTest && tank.lastTest.oxygen == null) tank.lastTest = null;
 }
 applySpeciesMetadata(fish);
@@ -92,6 +95,7 @@ let resettingGame = false;
 let maintenanceDragging = false;
 let siphonLoad = 0;
 let lastSiphonCloudAt = 0;
+let lastMaintenancePoint = null;
 const foodParticles = [];
 const liquidClouds = [];
 const debugMode = new URLSearchParams(location.search).has("debugTime");
@@ -148,6 +152,7 @@ function getVisibleFish() {
 }
 
 function switchTank(tankId) {
+  setHeldItem(null);
   currentTank = tankId;
   updateTankTabs(ui, tanks, currentTank);
   selectedFish = null;
@@ -158,6 +163,7 @@ function switchTank(tankId) {
 function update(delta) {
   const elapsedDays = gameDaysElapsed(delta);
   const view = getView();
+  if (maintenanceDragging && heldItem === "refill") updateRefill(delta);
   updateFoodParticles(delta, view);
   updateLiquidClouds(delta);
   updateWorld(delta, tanks, plants, fish, (day) => {
@@ -221,7 +227,7 @@ function update(delta) {
 
   const visibleFish = getVisibleFish();
   const glass = getGlassBounds(view);
-  const surfaceY = getSurfaceY(view);
+  const surfaceY = getSurfaceY(view, tanks[currentTank]);
   const floorY = view.height - 82;
   const foodPresent = foodParticles.some((particle) => particle.tank === currentTank);
   tanks[currentTank].lightLevel = daylightAt(gameClock.minute);
@@ -257,7 +263,8 @@ function draw() {
   const glass = getGlassBounds(view);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(glass.left, getSurfaceY(view) - 4, glass.width, view.height - getSurfaceY(view) + 4);
+  const surfaceY = getSurfaceY(view, tanks[currentTank]);
+  ctx.rect(glass.left, surfaceY - 4, glass.width, view.height - surfaceY + 4);
   ctx.clip();
   drawLiquidClouds(ctx, liquidClouds.filter((cloud) => cloud.tank === currentTank));
   drawFoodParticles(ctx, foodParticles.filter((particle) => particle.tank === currentTank));
@@ -266,7 +273,7 @@ function draw() {
   }
   if (currentTank === "sale") drawSaleEffects(ctx, tanks.sale);
   drawGlassAlgae(ctx, view, tanks[currentTank]);
-  drawDayNightOverlay(ctx, view, daylightAt(gameClock.minute), dayPeriod(gameClock.minute));
+  drawDayNightOverlay(ctx, view, daylightAt(gameClock.minute), dayPeriod(gameClock.minute), tanks[currentTank]);
   ctx.restore();
 
   maskAquariumEdges(ctx, view);
@@ -287,6 +294,7 @@ function draw() {
   document.getElementById("foodDoseCount").textContent = `${supplyCount("food")} davek`;
   ui.currentTask.textContent = taskText();
   ui.customerContract.textContent = contractText(ensureContract(economy));
+  updateMaintenanceShelf();
 }
 
 function selectFish(item) {
@@ -331,16 +339,6 @@ function unlockStoryChapters() {
   const unlocked = updateStory(economy, { tanks, plants, fish });
   for (const chapter of unlocked) addJournalEntry(ui, `Nalezena nova stranka deniku: ${chapter.title}.`);
   if (unlocked.length) renderStoryChapters(ui, storyChapters(economy));
-}
-
-function performWaterChange() {
-  changeWater(tanks[currentTank], waterConfig.waterChangeFraction);
-  tanks[currentTank].lastTest = null;
-  recordStoryAction(economy, "waterChange");
-  addLiquidCloud(canvas.width * 0.5, canvas.height * 0.35, "126, 188, 207", 60);
-  addJournalEntry(ui, `${tanks[currentTank].name}: vyměněna třetina vody. Nové hodnoty je potřeba změřit.`);
-  completeAction("clean");
-  unlockStoryChapters();
 }
 
 function closeJournal() {
@@ -554,7 +552,7 @@ window.addEventListener("keydown", (event) => {
 
   for (const button of document.querySelectorAll("[data-action]")) {
   button.addEventListener("click", () => {
-    if (button.dataset.action === heldItem) {
+    if (button.dataset.action === heldItem || (button.dataset.action === "clean" && heldItem === "refill")) {
       setHeldItem(null);
       return;
     }
@@ -567,10 +565,10 @@ window.addEventListener("keydown", (event) => {
       addJournalEntry(ui, "Debug: pridano 100 penez.");
     } else if (button.dataset.action === "sales") {
       startSalesDay();
-    } else if (button.dataset.action === "clean" || button.dataset.action === "scrape") {
+    } else if (button.dataset.action === "clean") {
+      setHeldItem((tanks[currentTank].waterRemoved ?? 0) > 0 ? "refill" : "clean");
+    } else if (button.dataset.action === "scrape") {
       setHeldItem(button.dataset.action);
-    } else if (button.dataset.action === "water-change") {
-      performWaterChange();
     } else if (button.dataset.action === "restart-game") {
       restartGame();
     } else {
@@ -649,20 +647,26 @@ function setHeldItem(action) {
     addJournalEntry(ui, t("event.no_money", { day: gameClock.day, cost: actionCosts[action] ?? 0 }));
     return;
   }
+  if (!action && heldItem === "clean" && !(tanks[currentTank].waterRemoved > 0)) tanks[currentTank].waterChangeActive = false;
   heldItem = action;
-  canvas.classList.toggle("maintenance-cursor", heldItem === "clean" || heldItem === "scrape");
-  if (heldItem !== "clean" && heldItem !== "scrape") {
+  const maintenanceTool = heldItem === "clean" || heldItem === "scrape" || heldItem === "refill";
+  canvas.classList.toggle("maintenance-cursor", maintenanceTool);
+  if (!maintenanceTool) {
     toolOverGlass = false;
     canvas.classList.remove("tool-over-glass");
   }
   for (const button of document.querySelectorAll("[data-action]")) {
-    button.classList.toggle("selected", button.dataset.action === heldItem);
+    button.classList.toggle("selected", button.dataset.action === heldItem || (button.dataset.action === "clean" && heldItem === "refill"));
   }
   if (heldItem === "feed") addLog(ui, "V ruce: vlocky. Klikni do vody.");
   if (heldItem === "test") addLog(ui, "V ruce: test ph. Klikni do vody.");
   if (heldItem === "plant") addLog(ui, "V ruce: rostlina. Klikni na misto v nadrzi.");
   if (heldItem === "medicine") addLog(ui, "V ruce: lek. Klikni do vody nebo pouzij kartu ryby.");
-  if (heldItem === "clean") addJournalEntry(ui, "Odkalovac: drz tlacitko mysi a pomalu prejizdej po dne.");
+  if (heldItem === "clean") {
+    tanks[currentTank].waterChangeActive = true;
+    addJournalEntry(ui, "Odkalovač: drž tlačítko myši a pomalu přejížděj po dně. Hladinu spusť mezi rysky 25 a 35 %.");
+  }
+  if (heldItem === "refill") addJournalEntry(ui, "Čerstvá voda: drž tlačítko myši nad nádrží, dokud se hladina nevrátí nahoru.");
   if (heldItem === "scrape") addJournalEntry(ui, "Skrabka: drz tlacitko mysi a prejizdej po skle s rasou.");
   updateHeldCursor();
   if (heldItem === "clean") {
@@ -670,6 +674,7 @@ function setHeldItem(action) {
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
     ui.heldCursor.style.setProperty("--siphon-fill", "0px");
   }
+  lastMaintenancePoint = null;
 }
 
 function useHeldItem(x, y) {
@@ -786,13 +791,58 @@ window.addEventListener("beforeunload", persistGame);
 function isPointInTank(x, y) {
   const view = getView();
   const glass = getGlassBounds(view);
-  return x >= glass.left && x <= glass.right && y >= 42 && y <= view.height - 32;
+  return x >= glass.left && x <= glass.right && y >= getSurfaceY(view, tanks[currentTank]) - 12 && y <= view.height - 32;
+}
+
+function updateRefill(delta) {
+  const tank = tanks[currentTank];
+  if (!(tank.waterRemoved > 0)) return finishWaterChange();
+  tank.waterRemoved = Math.max(0, tank.waterRemoved - delta * waterConfig.maintenance.refillPerSecond);
+  if (performance.now() - lastSiphonCloudAt > 120) {
+    const rect = canvas.getBoundingClientRect();
+    addLiquidCloud(pointer.x - rect.left, Math.max(getSurfaceY(getView(), tank), pointer.y - rect.top), "126, 188, 207", 14);
+    lastSiphonCloudAt = performance.now();
+  }
+  if (tank.waterRemoved <= 0.001) finishWaterChange();
+}
+
+function finishWaterChange() {
+  const tank = tanks[currentTank];
+  const fraction = Math.max(0.01, tank.pendingWaterChange ?? 0);
+  tank.waterRemoved = 0;
+  tank.waterChangeActive = false;
+  tank.pendingWaterChange = 0;
+  changeWater(tank, fraction);
+  const excess = Math.max(0, fraction - waterConfig.maintenance.recommendedMax);
+  if (excess > 0) {
+    for (const item of fish.filter((candidate) => candidate.tank === currentTank)) {
+      item.stress = Math.min(100, item.stress + excess * 45);
+    }
+  }
+  tank.lastTest = null;
+  recordStoryAction(economy, "waterChange");
+  const note = excess > 0.02 ? " Větší výměna ryby krátce vystresovala." : "";
+  addJournalEntry(ui, `${tank.name}: odkaleno a vyměněno ${Math.round(fraction * 100)} % vody.${note} Nové hodnoty je potřeba změřit.`);
+  completeAction("clean");
+  unlockStoryChapters();
+  maintenanceDragging = false;
+  setHeldItem(null);
+}
+
+function updateMaintenanceShelf() {
+  const tank = tanks[currentTank];
+  const removed = Math.round((tank.waterRemoved ?? 0) * 100);
+  const refilling = heldItem === "refill" || removed > 0;
+  document.getElementById("maintenanceLabel").childNodes[0].nodeValue = refilling ? "Doplnit " : "Odkalit ";
+  document.getElementById("maintenanceStatus").textContent = refilling ? `chybí ${removed} %` : "voda plná";
+  document.querySelector('[data-action="clean"] .jar').style.setProperty("--bucket-fill", `${Math.min(100, removed * 2)}%`);
 }
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (heldItem !== "clean" && heldItem !== "scrape") return;
+  if (heldItem !== "clean" && heldItem !== "scrape" && heldItem !== "refill") return;
   if (!spendForAction(heldItem)) return;
   maintenanceDragging = true;
+  lastMaintenancePoint = null;
   ui.heldCursor.classList.add("working");
   canvas.setPointerCapture(event.pointerId);
   applyMaintenance(event);
@@ -818,7 +868,7 @@ canvas.addEventListener("pointerup", (event) => {
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
     ui.heldCursor.style.setProperty("--siphon-fill", "0px");
     siphonLoad = 0;
-    completeAction("clean");
+    if ((tanks[currentTank].waterRemoved ?? 0) > 0.01) setHeldItem("refill");
   }
 });
 
@@ -828,6 +878,11 @@ function applyMaintenance(event) {
   const y = event.clientY - rect.top;
   if (!isPointInTank(x, y)) return;
   if (heldItem === "clean" && y > rect.height - 190) {
+    const distance = lastMaintenancePoint ? Math.hypot(x - lastMaintenancePoint.x, y - lastMaintenancePoint.y) : 4;
+    const drain = Math.min(0.008, Math.max(0.0008, distance * waterConfig.maintenance.drainPerPixel));
+    const tank = tanks[currentTank];
+    tank.waterRemoved = Math.min(waterConfig.maintenance.maximumDrain, (tank.waterRemoved ?? 0) + drain);
+    tank.pendingWaterChange = Math.max(tank.pendingWaterChange ?? 0, tank.waterRemoved);
     const before = tanks[currentTank].debris ?? 0;
     vacuumTank(tanks[currentTank], x / rect.width, 0.055, 0.055);
     const removed = Math.max(0, before - (tanks[currentTank].debris ?? 0));
@@ -840,10 +895,11 @@ function applyMaintenance(event) {
     }
   }
   if (heldItem === "scrape") {
-    const waterTop = getSurfaceY(getView());
+    const waterTop = getSurfaceY(getView(), tanks[currentTank]);
     const usableHeight = Math.max(1, rect.height - waterTop - 25);
     scrapeAlgae(tanks[currentTank], x / rect.width, (y - waterTop) / usableHeight, 0.075, 0.06);
   }
+  lastMaintenancePoint = { x, y };
 }
 
 function addSiphonSediment(x, y) {
@@ -976,7 +1032,7 @@ window.addEventListener("pointermove", (event) => {
     toolAngle += turn * 0.16;
   }
   pointer = { x: event.clientX, y: event.clientY };
-  if (heldItem === "clean" || heldItem === "scrape") {
+  if (heldItem === "clean" || heldItem === "scrape" || heldItem === "refill") {
     const rect = canvas.getBoundingClientRect();
     const localX = event.clientX - rect.left;
     const localY = event.clientY - rect.top;
@@ -996,13 +1052,13 @@ function updateHeldCursor() {
     ui.heldCursor.style.transform = "translate(-100px, -100px)";
     return;
   }
-  if ((heldItem === "clean" || heldItem === "scrape") && !toolOverGlass) {
+  if ((heldItem === "clean" || heldItem === "scrape" || heldItem === "refill") && !toolOverGlass) {
     ui.heldCursor.style.transform = "translate(-200px, -200px)";
     return;
   }
   ui.heldCursor.classList.add("visible", heldItem);
   if (maintenanceDragging) ui.heldCursor.classList.add("working");
-  const maintenanceTool = heldItem === "clean" || heldItem === "scrape";
+  const maintenanceTool = heldItem === "clean" || heldItem === "scrape" || heldItem === "refill";
   const x = pointer.x + (maintenanceTool ? 0 : 14);
   const y = pointer.y + (maintenanceTool ? 0 : 14);
   const rotation = maintenanceTool ? ` rotate(${toolAngle}rad)` : "";

@@ -119,7 +119,7 @@ export function vacuumTank(tank, xNormalized = 0.5, strength = 0.08, radius = 0.
 
 export function changeWater(tank, fraction = waterConfig.waterChangeFraction) {
   ensureWaterChemistry(tank);
-  const remaining = 1 - Math.max(0.1, Math.min(0.6, fraction));
+  const remaining = 1 - Math.max(0.01, Math.min(0.6, fraction));
   tank.ammonia *= remaining;
   tank.nitrite *= remaining;
   tank.nitrate *= remaining;

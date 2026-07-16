@@ -104,6 +104,10 @@
             <span class="jar book"></span>
             <span>Denicek</span>
           </button>
+          <button class="shelf-item" type="button" data-action="atlas" title="Otevřít atlas znaků">
+            <span class="atlas-icon">A</span>
+            <span>Atlas <small id="atlasCount">0/0</small></span>
+          </button>
           <button class="shelf-item" type="button" data-action="sales" title="Spustit prodejni den">
             <span class="jar sales"></span><span>Prodejni den</span>
           </button>
@@ -126,7 +130,6 @@
           <div class="fish-card-tabs">
             <button type="button" class="active" data-fish-page="overview">Prehled</button>
             <button type="button" data-fish-page="pedigree">Rodokmen</button>
-            <button type="button" data-fish-page="atlas">Atlas</button>
           </div>
 
           <dl class="fish-data" data-card-page="overview">
@@ -172,7 +175,6 @@
             <ul id="fishHistory"></ul>
           </div>
           <div class="pedigree-page" id="pedigreePage" data-card-page="pedigree"></div>
-          <div class="atlas-page" id="atlasPage" data-card-page="atlas"></div>
         </div>
       </aside>
 
@@ -195,6 +197,17 @@
           </div>
           <ul id="journalLog"></ul>
         </div>
+      </section>
+      <section class="atlas-panel" aria-label="Atlas znaků">
+        <button type="button" id="atlasCloseButton" class="journal-close" aria-label="Zavřít">X</button>
+        <p class="eyebrow">Pozorované ryby a znaky</p>
+        <h2>Chovatelský atlas</h2>
+        <p class="atlas-intro">Atlas obsahuje pouze ryby a znaky, které už byly skutečně pozorovány.</p>
+        <nav class="atlas-tabs" aria-label="Stránky atlasu">
+          <button type="button" class="active" data-atlas-tab="fish">Ryby</button>
+          <button type="button" data-atlas-tab="traits">Znaky</button>
+        </nav>
+        <div class="atlas-page" id="atlasPage"></div>
       </section>
       <section class="shop-panel" aria-label="Obchod">
         <button type="button" id="shopCloseButton" class="journal-close" aria-label="Zavrit">X</button>

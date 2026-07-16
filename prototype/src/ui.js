@@ -1,7 +1,7 @@
 import { diseaseDatabase, symptomDatabase } from "./systems/healthSystem.js";
 import { describeHealth, describeStress, getActiveSymptoms, getDiseaseStage } from "./systems/healthSystem.js";
 import { categoryName } from "./data/speciesData.js";
-import { hiddenGeneRows, inheritedFeatureLabels } from "./systems/lineageSystem.js";
+import { alleleName, geneticFeatureKeys, hiddenGeneRows, inheritedFeatureLabels } from "./systems/lineageSystem.js";
 import { csStoryUi } from "./i18n/csStory.js";
 
 const traitInfo = {
@@ -273,16 +273,40 @@ export function renderPedigreePage(ui, item, allFish, onSelect, archive = {}) {
   hiddenSection.appendChild(hiddenGenes); ui.pedigreePage.appendChild(hiddenSection);
 }
 
-export function renderAtlasPage(ui, sections) {
+export function renderAtlasPage(ui, sections, observedFish = [], page = "fish", drawThumbnail = null) {
   ui.atlasPage.innerHTML = "";
+  const found = sections.reduce((sum, section) => sum + section.entries.filter((entry) => entry.discovered).length, 0);
+  const summary = document.createElement("div"); summary.className = "atlas-summary";
+  summary.innerHTML = page === "fish"
+    ? `<strong>${observedFish.length}</strong><span>pozorovaných ryb</span>`
+    : `<strong>${found}</strong><span>objevených znaků</span>`;
+  ui.atlasPage.appendChild(summary);
+  if (page === "fish") {
+    const gallery = document.createElement("div"); gallery.className = "atlas-fish-gallery";
+    for (const fish of observedFish) {
+      const card = document.createElement("article"); card.className = "atlas-fish-entry";
+      const preview = document.createElement("canvas"); preview.width = 150; preview.height = 82;
+      if (drawThumbnail) drawThumbnail(preview, fish);
+      const title = document.createElement("h3"); title.textContent = fish.name ?? "Nepojmenovaná ryba";
+      const species = document.createElement("p"); species.textContent = fish.species ?? "Neznámá linie";
+      const traits = document.createElement("small");
+      traits.textContent = geneticFeatureKeys.map((key) => alleleName(key, fish[key])).join(" · ");
+      card.append(preview, title, species, traits); gallery.appendChild(card);
+    }
+    if (!observedFish.length) gallery.innerHTML = '<p class="atlas-empty">Zatím tu není žádná pozorovaná ryba.</p>';
+    ui.atlasPage.appendChild(gallery);
+    return;
+  }
   for (const section of sections) {
+    const discovered = section.entries.filter((entry) => entry.discovered);
+    if (!discovered.length) continue;
     const block = document.createElement("section");
-    const found = section.entries.filter((entry) => entry.discovered).length;
-    block.innerHTML = `<h3>${section.label} <small>${found}/${section.entries.length}</small></h3>`;
+    block.innerHTML = `<h3>${section.label} <small>${discovered.length} objeveno</small></h3>`;
     const entries = document.createElement("div"); entries.className = "atlas-entries";
-    for (const entry of section.entries) {
-      const tag = document.createElement("span"); tag.classList.toggle("unknown", !entry.discovered);
-      tag.textContent = entry.discovered ? entry.name : "???"; entries.appendChild(tag);
+    for (const entry of discovered) {
+      const tag = document.createElement("span");
+      tag.innerHTML = `<b>${entry.name}</b><small>${entry.sightings ? `pozorováno u ${entry.sightings} ryb` : "starší záznam"}</small>`;
+      entries.appendChild(tag);
     }
     block.appendChild(entries); ui.atlasPage.appendChild(block);
   }

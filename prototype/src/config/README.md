@@ -6,7 +6,8 @@ Soubory v teto slozce obsahuji herni hodnoty, ktere je mozne menit bez upravovan
 - `fishConfig.js` - hlad, zdravi, stres, lecba a zivotni faze ryb
 - `timeConfig.js` - rychlost normalniho a debug casu
 - `behaviorConfig.js` - den/noc, aktivita, hejno, ukryvani a namluvy
-- `waterConfig.js` - kapacity nadrzi, odpad, dusikovy cyklus, kyslik, teplota, svetlo, rostliny a bezpecne limity testu
+- `waterConfig.js` - kapacity nadrzi, odpad, dusikovy cyklus, kyslik, teplota, svetlo a bezpecne limity testu
+- `plantConfig.js` - dny rustovych fazi jednotlivych rostlin, vliv prostredi, kveteni a velikost plovoucich rostlin
 - `breedingConfig.js` - delka namluv, inkubace, cooldown, velikost snusky, mutace a startovni stav poteru
 - `geneticsConfig.js` - dostupne alely, dominance, vychozi alely a cetnost skrytych genu
 - `salesConfig.js` - ceny ryb, delka navstev, rychlost zakazniku a sance na nakup
@@ -20,4 +21,3 @@ npm.cmd run check
 ```
 
 Zmeny vychozich hodnot se nemusi projevit na hodnotach, ktere uz jsou ulozene v existujicim save. Pro test uplne novych defaults pouzij tlacitko `Nova hra`.
-

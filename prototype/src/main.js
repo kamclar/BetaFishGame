@@ -3,12 +3,12 @@ import { getGlassBounds, getSurfaceY, maskAquariumEdges } from "./art/aquariumAr
 import { drawFish } from "./art/fishArt.js";
 import { fishRenderScale } from "./art/fishArt.js";
 import { loadFishSpriteAssets } from "./art/spriteAssets.js";
-import { ensureStarterSchool, fish, palette, plants, tanks } from "./data/fishData.js";
+import { ensureAnatomyV6TestFish, ensureStarterSchool, fish, palette, plants, tanks, updateStarterSchoolVisuals } from "./data/fishData.js";
 import { applySpeciesMetadata } from "./data/speciesData.js";
 import { createPlant, plantTypes, plantTypeOrder } from "./data/plantData.js";
 import { diseaseDatabase } from "./data/healthData.js";
 import { initializeLifecycle, updateLifecycle } from "./systems/lifecycleSystem.js";
-import { applyTankEffects, changeWater, ensureWaterChemistry, formatCompactWaterTest, formatGameTime, formatWaterTest, gameClock, scrapeAlgae, updateWorld, vacuumTank, waterTestAdvice, waterTestResult } from "./systems/tankSystem.js";
+import { addTankSnail, applyTankEffects, changeWater, ensureWaterChemistry, formatCompactWaterTest, formatGameTime, formatWaterTest, gameClock, scrapeAlgae, updateWorld, vacuumTank, waterTestAdvice, waterTestResult } from "./systems/tankSystem.js";
 import { actionCosts, addSkillExperience, addSupply, canAfford, consumeSupply, economy, ensureDailyGoals, initializeEconomy, isShopUnlocked, payForAction, recordAction, shopUnlocks, skillInfo, supplyCount, taskText } from "./systems/economySystem.js";
 import { clearSavedGame, loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
@@ -16,7 +16,7 @@ import { addMysteryEggs, initializeBreeding, updateSpawning } from "./systems/br
 import { prepareForSale, startLiveSales, updateLiveSales } from "./systems/salesSystem.js";
 import { contractText, ensureContract, recordContractSale } from "./systems/contractSystem.js";
 import { createCombinedEldritchPreview, eldritchJournalEntry } from "./systems/eldritchSystem.js";
-import { discoverLineageFeatures, lineageAtlasSections } from "./systems/lineageSystem.js";
+import { initializeLineageAtlas, lineageAtlasFish, lineageAtlasSections, observeLineageFeatures } from "./systems/lineageSystem.js";
 import { initializePedigreeArchive, pairingAssessment, registerFishPedigree } from "./systems/pedigreeSystem.js";
 import { initializeStory, recordStoryAction, storyChapters, updateStory } from "./systems/storySystem.js";
 import { gameDaysElapsed } from "./systems/timeSystem.js";
@@ -42,6 +42,7 @@ const ui = createUi();
 const hudToggle = document.getElementById("hudToggle");
 loadFishSpriteAssets();
 restoreSavedGame();
+ensureAnatomyV6TestFish();
 const existingEldritchPreview = fish.find((item) => item.id === "eldritch-preview-stage-4");
 if (existingEldritchPreview) {
   Object.assign(existingEldritchPreview, {
@@ -63,6 +64,11 @@ if (!economy.starterSchoolAdded) {
   ensureStarterSchool(fish);
   economy.starterSchoolAdded = true;
 }
+if (!plants.main.some((plant) => plant.type === "floatingPlant")) {
+  plants.main.push(createPlant("floatingPlant", 520, 0, 1.7));
+}
+// Starší uložené hry měly celé obrázky, které skrývaly barvu a kresbu hejna.
+updateStarterSchoolVisuals(fish);
 migrateBiologicalClock();
 initializeStory(economy);
 for (const [tankId, tank] of Object.entries(tanks)) {
@@ -78,7 +84,7 @@ ensureContract(economy);
 for (const item of fish) initializeLifecycle(item);
 initializeBreeding(fish);
 initializePedigreeArchive(economy, fish);
-discoverLineageFeatures(economy, fish);
+initializeLineageAtlas(economy);
 unlockStoryChapters();
 for (const item of fish) item.traits = item.traits.map((trait) => trait === "ticha" ? "echolokacni" : trait);
 
@@ -88,6 +94,8 @@ let currentTank = "main";
 let nextPlantX = 220;
 let heldItem = null;
 let pointer = { x: -100, y: -100 };
+let toolCursor = { x: -100, y: -100 };
+let toolDirectionAnchor = null;
 let toolAngle = 0;
 let toolTargetAngle = 0;
 let toolOverGlass = false;
@@ -95,7 +103,10 @@ let resettingGame = false;
 let maintenanceDragging = false;
 let siphonLoad = 0;
 let lastSiphonCloudAt = 0;
+let lastRefillSedimentAt = 0;
+let lastRefillRippleAt = 0;
 let lastMaintenancePoint = null;
+let lastMaintenanceAt = 0;
 let waterTestSession = null;
 let sampleFilling = false;
 let suppressNextCanvasClick = false;
@@ -166,6 +177,7 @@ function switchTank(tankId) {
 function update(delta) {
   const elapsedDays = gameDaysElapsed(delta);
   const view = getView();
+  updateToolMotion(delta);
   if (maintenanceDragging && heldItem === "refill") updateRefill(delta);
   if (sampleFilling && waterTestSession && !waterTestSession.ready) {
     waterTestSession.fill = Math.min(1, waterTestSession.fill + delta * 0.48);
@@ -198,7 +210,6 @@ function update(delta) {
       babies.forEach(initializeLifecycle);
       babies.forEach((baby) => registerFishPedigree(economy, baby));
       parents.forEach((parent) => registerFishPedigree(economy, parent));
-      discoverLineageFeatures(economy, babies);
       const names = babies.map((baby) => baby.name).join(" a ");
       const message = parents.length === 2
         ? `Z jiker ryb ${parents[0].name} a ${parents[1].name} se vylihl poter: ${names}.`
@@ -282,13 +293,15 @@ function draw() {
   drawLiquidClouds(ctx, liquidClouds.filter((cloud) => cloud.tank === currentTank));
   drawFoodParticles(ctx, foodParticles.filter((particle) => particle.tank === currentTank));
   for (const item of getVisibleFish()) {
+    observeLineageFeatures(economy, item);
     drawFish(ctx, item, { palette, getActiveSymptoms, selectedFish });
   }
   if (currentTank === "sale") drawSaleEffects(ctx, tanks.sale);
-  drawGlassAlgae(ctx, view, tanks[currentTank]);
   drawDayNightOverlay(ctx, view, daylightAt(gameClock.minute), dayPeriod(gameClock.minute), tanks[currentTank]);
   ctx.restore();
 
+  // Rasa patri na pevne sklo a nesmi se skalovat ani mizet spolu s odpoustenou vodou.
+  drawGlassAlgae(ctx, view, tanks[currentTank]);
   maskAquariumEdges(ctx, view);
   drawGlass(ctx, view);
   refreshFishCard(ui, selectedFish);
@@ -328,10 +341,31 @@ function showFishPage(page) {
   if (!selectedFish) return;
   setFishCardPage(ui, page);
   if (page === "pedigree") renderPedigreePage(ui, selectedFish, fish, selectRelatedFish, economy.pedigreeArchive);
-  if (page === "atlas") {
-    discoverLineageFeatures(economy, fish);
-    renderAtlasPage(ui, lineageAtlasSections(economy));
-  }
+}
+
+let atlasPage = "fish";
+
+function drawAtlasThumbnail(canvas, fishSnapshot) {
+  const preview = canvas.getContext("2d");
+  preview.clearRect(0, 0, canvas.width, canvas.height);
+  const item = { ...fishSnapshot, x: canvas.width / 2, y: canvas.height / 2, dir: 1, phase: 0.5, size: 1.45, growthScale: 1 };
+  drawFish(preview, item, { palette, getActiveSymptoms: () => [], selectedFish: null });
+}
+
+function refreshAtlas() {
+  renderAtlasPage(ui, lineageAtlasSections(economy), lineageAtlasFish(economy), atlasPage, drawAtlasThumbnail);
+  document.querySelectorAll("[data-atlas-tab]").forEach((button) => button.classList.toggle("active", button.dataset.atlasTab === atlasPage));
+}
+
+function openAtlas() {
+  refreshAtlas();
+  ui.appShell.classList.remove("show-card", "show-journal", "show-shop");
+  ui.appShell.classList.add("show-atlas");
+}
+
+function closeAtlas() {
+  ui.appShell.classList.remove("show-atlas");
+  if (selectedFish) ui.appShell.classList.add("show-card");
 }
 
 function deselectFish() {
@@ -343,7 +377,7 @@ function openJournal() {
   renderDailyGoals(ui, economy.dailyGoals);
   renderStoryChapters(ui, storyChapters(economy));
   setJournalPage(ui, "story");
-  ui.appShell.classList.remove("show-card");
+  ui.appShell.classList.remove("show-card", "show-atlas");
   ui.appShell.classList.add("show-journal");
   handleTutorialEvent("journalOpened");
 }
@@ -361,6 +395,7 @@ function closeJournal() {
 
 function openShop() {
   refreshShop();
+  ui.appShell.classList.remove("show-atlas");
   ui.appShell.classList.add("show-shop");
 }
 
@@ -371,7 +406,7 @@ function closeShop() {
 function buySnail() {
   if (!requireShopUnlock("snail")) return;
   if (!spendForAction("snail")) return;
-  tanks[currentTank].snails = (tanks[currentTank].snails ?? 0) + 1;
+  addTankSnail(tanks[currentTank]);
   refreshShop();
   addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} pribyla ampularie. Pomalu cisti rasy ze skla.`);
 }
@@ -562,6 +597,7 @@ window.addEventListener("keydown", (event) => {
     deselectFish();
     closeJournal();
     closeShop();
+    closeAtlas();
   }
 });
 
@@ -573,6 +609,8 @@ window.addEventListener("keydown", (event) => {
     }
     if (button.dataset.action === "journal") {
       openJournal();
+    } else if (button.dataset.action === "atlas") {
+      openAtlas();
     } else if (button.dataset.action === "shop") {
       openShop();
     } else if (button.dataset.action === "debug-money" && debugMode) {
@@ -593,6 +631,11 @@ window.addEventListener("keydown", (event) => {
 }
 
 document.getElementById("journalCloseButton").addEventListener("click", closeJournal);
+document.getElementById("atlasCloseButton").addEventListener("click", closeAtlas);
+document.querySelectorAll("[data-atlas-tab]").forEach((button) => button.addEventListener("click", () => {
+  atlasPage = button.dataset.atlasTab;
+  refreshAtlas();
+}));
 document.getElementById("shopCloseButton").addEventListener("click", closeShop);
 document.getElementById("testTrayClose").addEventListener("click", cancelWaterTest);
 document.getElementById("finishWaterTest").addEventListener("click", finishWaterTest);
@@ -671,6 +714,11 @@ function setHeldItem(action) {
     sampleFilling = false;
   }
   heldItem = action;
+  if (action === "clean" || action === "scrape" || action === "refill") {
+    toolCursor = { ...pointer };
+    toolDirectionAnchor = { ...pointer };
+    if (action === "clean" || action === "refill") toolAngle = toolTargetAngle = 0;
+  }
   const maintenanceTool = heldItem === "clean" || heldItem === "scrape" || heldItem === "refill";
   canvas.classList.toggle("maintenance-cursor", maintenanceTool);
   if (!maintenanceTool) {
@@ -695,6 +743,7 @@ function setHeldItem(action) {
     siphonLoad = 0;
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
     ui.heldCursor.style.setProperty("--siphon-fill", "0px");
+    ui.heldCursor.style.setProperty("--siphon-level", "0%");
   }
   lastMaintenancePoint = null;
   if (heldItem !== "test") ui.heldCursor.style.setProperty("--sample-fill", "0");
@@ -810,6 +859,13 @@ function isPointInTank(x, y) {
   return x >= glass.left && x <= glass.right && y >= getSurfaceY(view, tanks[currentTank]) - 12 && y <= view.height - 32;
 }
 
+function isPointInRefillZone(x, y) {
+  const view = getView();
+  const glass = getGlassBounds(view);
+  const surfaceY = getSurfaceY(view, tanks[currentTank]);
+  return x >= glass.left && x <= glass.right && y >= glass.top && y <= surfaceY + 26;
+}
+
 canvas.addEventListener("pointerdown", (event) => {
   if (heldItem !== "test") return;
   const rect = canvas.getBoundingClientRect();
@@ -838,7 +894,7 @@ canvas.addEventListener("pointerup", (event) => {
 function openWaterTestTray() {
   const tray = document.getElementById("waterTestTray");
   tray.hidden = false;
-  ui.appShell.classList.remove("show-card", "show-journal", "show-shop");
+  ui.appShell.classList.remove("show-card", "show-journal", "show-shop", "show-atlas");
   document.getElementById("finishWaterTest").disabled = true;
   document.getElementById("testTrayInstruction").textContent = "Kapátkem aktivuj každou zkumavku.";
   for (const vial of tray.querySelectorAll(".test-vial")) {
@@ -906,11 +962,37 @@ function waterTestColor(key, value) {
 function updateRefill(delta) {
   const tank = tanks[currentTank];
   if (!(tank.waterRemoved > 0)) return finishWaterChange();
-  tank.waterRemoved = Math.max(0, tank.waterRemoved - delta * waterConfig.maintenance.refillPerSecond);
-  if (performance.now() - lastSiphonCloudAt > 120) {
-    const rect = canvas.getBoundingClientRect();
-    addLiquidCloud(pointer.x - rect.left, Math.max(getSurfaceY(getView(), tank), pointer.y - rect.top), "126, 188, 207", 14);
+  const rect = canvas.getBoundingClientRect();
+  const surfaceScreenY = rect.top + getSurfaceY(getView(), tank);
+  const fallDistance = Math.max(0, surfaceScreenY - toolCursor.y);
+  const flowRatio = Math.max(0, Math.min(1, fallDistance / 150));
+  ui.heldCursor.style.setProperty("--refill-flow-scale", (0.85 + flowRatio * 0.9).toFixed(2));
+  ui.heldCursor.style.setProperty("--refill-frame-duration", `${Math.round(650 - flowRatio * 290)}ms`);
+  const refillRate = waterConfig.maintenance.refillGentleRate
+    + (waterConfig.maintenance.refillFastRate - waterConfig.maintenance.refillGentleRate) * flowRatio;
+  tank.waterRemoved = Math.max(0, tank.waterRemoved - delta * refillRate);
+  const now = performance.now();
+  if (now - lastRefillRippleAt >= waterConfig.maintenance.refillRippleIntervalMs) {
+    tank.surfaceRipples ??= [];
+    tank.surfaceRipples.push({
+      x: toolCursor.x - rect.left,
+      createdAt: now,
+      strength: 0.45 + flowRatio * 0.85,
+    });
+    if (tank.surfaceRipples.length > 14) tank.surfaceRipples.splice(0, tank.surfaceRipples.length - 14);
+    lastRefillRippleAt = now;
+  }
+  if (performance.now() - lastSiphonCloudAt > 220) {
+    liquidClouds.push({
+      x: toolCursor.x - rect.left, y: getSurfaceY(getView(), tank) + 2,
+      vx: 0, vy: 2, radius: 7, color: "126, 188, 207",
+      life: 0.65, maxLife: 0.65, tank: currentTank,
+    });
     lastSiphonCloudAt = performance.now();
+  }
+  if (refillRate > waterConfig.maintenance.refillSafeRate && performance.now() - lastRefillSedimentAt > waterConfig.maintenance.refillStirIntervalMs) {
+    addRefillSediment(toolCursor.x - rect.left, getView());
+    lastRefillSedimentAt = performance.now();
   }
   if (tank.waterRemoved <= 0.001) finishWaterChange();
 }
@@ -945,13 +1027,21 @@ function updateMaintenanceShelf() {
   document.getElementById("maintenanceLabel").childNodes[0].nodeValue = refilling ? "Doplnit " : "Odkalit ";
   document.getElementById("maintenanceStatus").textContent = refilling ? `chybí ${removed} %` : "voda plná";
   document.querySelector('[data-action="clean"] .jar').style.setProperty("--bucket-fill", `${Math.min(100, removed * 2)}%`);
+  const sections = lineageAtlasSections(economy);
+  const found = sections.reduce((sum, section) => sum + section.entries.filter((entry) => entry.discovered).length, 0);
+  document.getElementById("atlasCount").textContent = `${lineageAtlasFish(economy).length} ryb · ${found} znaků`;
 }
 
 canvas.addEventListener("pointerdown", (event) => {
   if (heldItem !== "clean" && heldItem !== "scrape" && heldItem !== "refill") return;
+  const rect = canvas.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+  if (heldItem === "refill" ? !isPointInRefillZone(localX, localY) : !isPointInTank(localX, localY)) return;
   if (!spendForAction(heldItem)) return;
   maintenanceDragging = true;
   lastMaintenancePoint = null;
+  lastMaintenanceAt = performance.now();
   ui.heldCursor.classList.add("working");
   canvas.setPointerCapture(event.pointerId);
   applyMaintenance(event);
@@ -976,6 +1066,7 @@ canvas.addEventListener("pointerup", (event) => {
   if (heldItem === "clean") {
     ui.heldCursor.style.setProperty("--siphon-turbidity", "0");
     ui.heldCursor.style.setProperty("--siphon-fill", "0px");
+    ui.heldCursor.style.setProperty("--siphon-level", "0%");
     siphonLoad = 0;
     if ((tanks[currentTank].waterRemoved ?? 0) > 0.01) setHeldItem("refill");
   }
@@ -983,47 +1074,88 @@ canvas.addEventListener("pointerup", (event) => {
 
 function applyMaintenance(event) {
   const rect = canvas.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const x = toolCursor.x - rect.left;
+  const y = toolCursor.y - rect.top;
+  const now = performance.now();
+  const elapsed = Math.max(0.008, Math.min(0.1, (now - lastMaintenanceAt) / 1000));
   if (!isPointInTank(x, y)) return;
   if (heldItem === "clean" && y > rect.height - 190) {
     const distance = lastMaintenancePoint ? Math.hypot(x - lastMaintenancePoint.x, y - lastMaintenancePoint.y) : 4;
-    const drain = Math.min(0.008, Math.max(0.0008, distance * waterConfig.maintenance.drainPerPixel));
+    const speed = distance / elapsed;
+    const activity = Math.max(0.35, Math.min(1, 0.35 + speed / 260));
+    const drain = elapsed * waterConfig.maintenance.drainPerSecond * activity
+      + Math.min(0.00035, distance * waterConfig.maintenance.drainPerPixel);
     const tank = tanks[currentTank];
     tank.waterRemoved = Math.min(waterConfig.maintenance.maximumDrain, (tank.waterRemoved ?? 0) + drain);
     tank.pendingWaterChange = Math.max(tank.pendingWaterChange ?? 0, tank.waterRemoved);
     const before = tanks[currentTank].debris ?? 0;
-    vacuumTank(tanks[currentTank], x / rect.width, 0.055, 0.055);
+    vacuumTank(tanks[currentTank], x / rect.width, elapsed * waterConfig.maintenance.vacuumRemovalPerSecond * activity, waterConfig.maintenance.vacuumRadius);
     const removed = Math.max(0, before - (tanks[currentTank].debris ?? 0));
-    siphonLoad = Math.min(0.92, siphonLoad + removed * 9 + 0.018);
+    const debrisPresence = Math.max(0, Math.min(1, before * 4));
+    siphonLoad = Math.min(0.96, siphonLoad + removed * 80 + elapsed * activity * debrisPresence * 0.24);
     ui.heldCursor.style.setProperty("--siphon-turbidity", siphonLoad.toFixed(2));
     ui.heldCursor.style.setProperty("--siphon-fill", `${Math.round(siphonLoad * 47)}px`);
-    if (performance.now() - lastSiphonCloudAt > 85) {
+    ui.heldCursor.style.setProperty("--siphon-level", `${Math.round(siphonLoad * 100)}%`);
+    if (performance.now() - lastSiphonCloudAt > 105) {
       addSiphonSediment(x, y - 3);
       lastSiphonCloudAt = performance.now();
     }
   }
   if (heldItem === "scrape") {
-    const waterTop = getSurfaceY(getView(), tanks[currentTank]);
-    const usableHeight = Math.max(1, rect.height - waterTop - 25);
-    scrapeAlgae(tanks[currentTank], x / rect.width, (y - waterTop) / usableHeight, 0.075, 0.06);
+    const distance = lastMaintenancePoint ? Math.hypot(x - lastMaintenancePoint.x, y - lastMaintenancePoint.y) : 0;
+    const speed = distance / elapsed;
+    if (lastMaintenancePoint && distance > 0.5) {
+      const view = getView();
+      const glass = getGlassBounds(view);
+      const algaeLeft = glass.left + 5;
+      const algaeTop = getSurfaceY(view) + 5;
+      const algaeWidth = Math.max(1, glass.width - 10);
+      const algaeHeight = Math.max(1, view.height - 56 - algaeTop);
+      const directionX = (x - lastMaintenancePoint.x) / algaeWidth;
+      const directionY = (y - lastMaintenancePoint.y) / algaeHeight;
+      const speedRange = Math.max(1, waterConfig.maintenance.fastScrapeSpeed - waterConfig.maintenance.slowScrapeSpeed);
+      const speedRatio = Math.max(0, Math.min(1, (speed - waterConfig.maintenance.slowScrapeSpeed) / speedRange));
+      const efficiency = 1 - speedRatio * (1 - waterConfig.maintenance.fastScrapeEfficiency);
+      const strength = waterConfig.maintenance.scrapeRemovalPerSecond * elapsed * efficiency;
+      scrapeAlgae(
+        tanks[currentTank], (x - algaeLeft) / algaeWidth, (y - algaeTop) / algaeHeight,
+        strength, waterConfig.maintenance.scraperWidth, waterConfig.maintenance.scraperHeight,
+        directionX, directionY, speed <= waterConfig.maintenance.slowScrapeSpeed,
+      );
+    }
+    lastMaintenanceAt = now;
   }
+  lastMaintenanceAt = now;
   lastMaintenancePoint = { x, y };
 }
 
 function addSiphonSediment(x, y) {
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     liquidClouds.push({
-      x: x + (i - 1) * 7,
-      y: y - (i % 2) * 4,
-      vx: (i - 1) * 7,
-      vy: -3 - i,
-      radius: 5 + i * 2,
+      x: x + (i - 2.5) * 6,
+      y: y - (i % 3) * 5,
+      vx: (i - 2.5) * 9,
+      vy: -5 - i * 1.4,
+      radius: 9 + (i % 3) * 5,
       color: "112, 76, 43",
-      life: 0.7,
-      maxLife: 0.7,
+      life: 1.15,
+      maxLife: 1.15,
       sediment: true,
       tank: currentTank,
+    });
+  }
+}
+
+function addRefillSediment(x, view) {
+  const floorY = view.height - 48;
+  for (let i = 0; i < 18; i += 1) {
+    liquidClouds.push({
+      x: x + Math.sin(i * 2.17) * (18 + (i % 5) * 7),
+      y: floorY - 4 - (i % 4) * 3,
+      vx: Math.sin(i * 1.31) * (12 + (i % 3) * 7),
+      vy: -18 - (i % 6) * 8,
+      radius: 1 + (i % 3), color: i % 4 === 0 ? "132, 94, 53" : "78, 61, 39",
+      life: 7 + (i % 5) * 0.8, maxLife: 10.2, settling: true, tank: currentTank,
     });
   }
 }
@@ -1069,13 +1201,23 @@ function updateFoodParticles(delta, view) {
 }
 
 function updateLiquidClouds(delta) {
+  const floorY = getView().height - 48;
   for (const cloud of [...liquidClouds]) {
     cloud.x += cloud.vx * delta;
     cloud.y += cloud.vy * delta;
-    cloud.radius += delta * 18;
+    if (cloud.settling) {
+      cloud.vy = Math.min(20, cloud.vy + delta * 13);
+      if (cloud.y >= floorY && cloud.vy > 0) {
+        cloud.y = floorY;
+        cloud.vx *= 0.75;
+        cloud.life -= delta * 2.5;
+      }
+    } else {
+      cloud.radius += delta * 18;
+    }
     cloud.life -= delta;
     cloud.vx *= 0.985;
-    cloud.vy *= 0.985;
+    if (!cloud.settling) cloud.vy *= 0.985;
     if (cloud.life <= 0) liquidClouds.splice(liquidClouds.indexOf(cloud), 1);
   }
 }
@@ -1133,19 +1275,26 @@ function loop(now) {
 
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("pointermove", (event) => {
-  const dx = event.clientX - pointer.x;
-  const dy = event.clientY - pointer.y;
-  if ((heldItem === "clean" || heldItem === "scrape") && Math.hypot(dx, dy) > 2) {
-    toolTargetAngle = Math.atan2(dy, dx) + (heldItem === "scrape" ? -Math.PI / 2 : Math.PI / 2);
-    const turn = Math.atan2(Math.sin(toolTargetAngle - toolAngle), Math.cos(toolTargetAngle - toolAngle));
-    toolAngle += turn * 0.16;
+  if ((heldItem === "clean" || heldItem === "scrape") && toolDirectionAnchor) {
+    const dx = event.clientX - toolDirectionAnchor.x;
+    const dy = event.clientY - toolDirectionAnchor.y;
+    if (Math.hypot(dx, dy) >= waterConfig.maintenance.toolDirectionDeadzone) {
+      if (heldItem === "clean") {
+        const tiltRatio = Math.max(-1, Math.min(1, dx / waterConfig.maintenance.siphonTiltDistance));
+        toolTargetAngle = tiltRatio * waterConfig.maintenance.siphonMaxTilt;
+      } else {
+        const rawAngle = Math.atan2(dy, dx) - Math.PI / 2;
+        toolTargetAngle = closestAxialAngle(rawAngle, toolTargetAngle);
+      }
+      toolDirectionAnchor = { x: event.clientX, y: event.clientY };
+    }
   }
   pointer = { x: event.clientX, y: event.clientY };
   if (heldItem === "clean" || heldItem === "scrape" || heldItem === "refill") {
     const rect = canvas.getBoundingClientRect();
     const localX = event.clientX - rect.left;
     const localY = event.clientY - rect.top;
-    toolOverGlass = event.target === canvas && isPointInTank(localX, localY);
+    toolOverGlass = event.target === canvas && (heldItem === "refill" ? isPointInRefillZone(localX, localY) : isPointInTank(localX, localY));
     canvas.classList.toggle("tool-over-glass", toolOverGlass);
   }
   updateHeldCursor();
@@ -1168,8 +1317,39 @@ function updateHeldCursor() {
   ui.heldCursor.classList.add("visible", heldItem);
   if (maintenanceDragging) ui.heldCursor.classList.add("working");
   const maintenanceTool = heldItem === "clean" || heldItem === "scrape" || heldItem === "refill";
-  const x = pointer.x + (maintenanceTool ? 0 : 14);
-  const y = pointer.y + (maintenanceTool ? 0 : 14);
-  const rotation = maintenanceTool ? ` rotate(${toolAngle}rad)` : "";
+  const x = (maintenanceTool ? toolCursor.x : pointer.x) + (maintenanceTool ? 0 : 14);
+  const y = (maintenanceTool ? toolCursor.y : pointer.y) + (maintenanceTool ? 0 : 14);
+  const rotation = heldItem === "clean" || heldItem === "scrape" ? ` rotate(${toolAngle}rad)` : "";
+  if (heldItem === "refill") {
+    const rect = canvas.getBoundingClientRect();
+    const surfaceScreenY = rect.top + getSurfaceY(getView(), tanks[currentTank]);
+    const streamLength = Math.max(18, Math.min(rect.height, surfaceScreenY - y + 4));
+    ui.heldCursor.style.setProperty("--refill-stream", `${streamLength}px`);
+  }
   ui.heldCursor.style.transform = `translate(${x}px, ${y}px)${rotation}`;
+}
+
+function closestAxialAngle(angle, reference) {
+  const candidates = [angle - Math.PI, angle, angle + Math.PI];
+  return candidates.reduce((closest, candidate) => {
+    const candidateTurn = Math.abs(Math.atan2(Math.sin(candidate - reference), Math.cos(candidate - reference)));
+    const closestTurn = Math.abs(Math.atan2(Math.sin(closest - reference), Math.cos(closest - reference)));
+    return candidateTurn < closestTurn ? candidate : closest;
+  });
+}
+
+function updateToolMotion(delta) {
+  if (heldItem !== "clean" && heldItem !== "scrape" && heldItem !== "refill") return;
+  const positionBlend = 1 - Math.exp(-waterConfig.maintenance.toolPositionEase * delta);
+  toolCursor.x += (pointer.x - toolCursor.x) * positionBlend;
+  toolCursor.y += (pointer.y - toolCursor.y) * positionBlend;
+  if (heldItem === "clean" || heldItem === "scrape") {
+    if (heldItem === "clean") toolTargetAngle *= Math.exp(-waterConfig.maintenance.siphonReturnEase * delta);
+    const turn = Math.atan2(Math.sin(toolTargetAngle - toolAngle), Math.cos(toolTargetAngle - toolAngle));
+    const rotationEase = heldItem === "clean" ? waterConfig.maintenance.siphonRotationEase : waterConfig.maintenance.toolRotationEase;
+    const rotationBlend = 1 - Math.exp(-rotationEase * delta);
+    toolAngle += turn * rotationBlend;
+    if (heldItem === "clean") toolAngle = Math.max(-waterConfig.maintenance.siphonMaxTilt, Math.min(waterConfig.maintenance.siphonMaxTilt, toolAngle));
+  }
+  updateHeldCursor();
 }

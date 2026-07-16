@@ -3,14 +3,31 @@ export const waterConfig = {
   defaults: { ph: 7.2, temperature: 24.8, hardness: 7, oxygen: 7.6, capacity: 12, lightStrength: 1 },
   tapWater: { ph: 7.2, hardness: 7, oxygen: 8.2 },
   waterChangeFraction: 0.35,
-  maintenance: { recommendedMin: 0.25, recommendedMax: 0.35, maximumDrain: 0.5, drainPerPixel: 0.000075, refillPerSecond: 0.12 },
+  maintenance: {
+    recommendedMin: 0.25, recommendedMax: 0.35, maximumDrain: 0.5,
+    drainPerPixel: 0.000035, drainPerSecond: 0.009, vacuumRemovalPerSecond: 0.22,
+    vacuumRadius: 0.038, refillGentleRate: 0.035, refillFastRate: 0.085,
+    refillSafeRate: 0.052, refillStirIntervalMs: 190,
+    refillRippleIntervalMs: 170, refillRippleLifetime: 2.4,
+    refillRippleSpeed: 115, refillRippleAmplitude: 5.5, refillRippleWidth: 34,
+    toolPositionEase: 16, toolRotationEase: 1.55, toolDirectionDeadzone: 34,
+    siphonRotationEase: 1.8, siphonReturnEase: 0.38, siphonMaxTilt: 1.047, siphonTiltDistance: 48,
+    scraperWidth: 0.032, scraperHeight: 0.105, scrapeRemovalPerSecond: 3.4,
+    slowScrapeSpeed: 90, fastScrapeSpeed: 720, fastScrapeEfficiency: 0.46,
+  },
   bioload: { fishSizeFactor: 0.72, snail: 0.35 },
+  snails: {
+    juvenileScale: 0.48, adultScale: 1, adultSize: 46, growthDays: 48,
+    migratedAgeFraction: 0.7, antennaSpeed: 0.00115, antennaReach: 1,
+  },
   filter: { level2WasteFactor: 0.62, level2CycleStrength: 1.65 },
   dirt: {
+    algaeMapColumns: 128, algaeMapRows: 72, algaeGrowthSamplesPerStep: 16,
     initialWaste: 0.12, initialDebris: 0.08, initialBrownWater: 0.04, initialAlgae: 0.06,
     wastePerFishSecond: 0.00018, debrisPerFishSecond: 0.0000002,
     brownFromDebris: 0.0000005, brownFromWaste: 0.00000025,
     algaeBase: 0.00000075, algaeFromWater: 0.00000025, snailCleaning: 0.000055,
+    snailDebrisPerSecond: 0.00000014,
     mapStepSeconds: 900, algaeMapGrowth: 0.018, debrisMapGrowth: 0.006,
   },
   nitrogen: {
@@ -28,5 +45,4 @@ export const waterConfig = {
   safe: { ammonia: 0.1, nitrite: 0.1, nitrate: 30, oxygen: 6, temperatureMin: 22.5, temperatureMax: 27.5, hardnessMin: 3, hardnessMax: 14, phMin: 6.5, phMax: 7.8, loadPercent: 100 },
   qualityBands: { excellent: 0.9, good: 0.75, reduced: 0.58 },
   qualityWeights: { ammonia: 0.34, nitrite: 0.27, nitrate: 0.12, ph: 0.06, oxygen: 0.12, temperature: 0.04, crowding: 0.05 },
-  plants: { ageRate: 0.02, growthRate: 0.00045, conditionRate: 0.00035, minimumLightFitness: 0.12 },
 };

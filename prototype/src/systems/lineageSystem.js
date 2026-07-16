@@ -88,22 +88,60 @@ function defaultAllele(key) {
   return defaultAlleles[key];
 }
 
-export function discoverLineageFeatures(economy, fish) {
-  economy.atlas ??= {};
-  for (const key of Object.keys(catalogs)) economy.atlas[key] ??= [];
-  for (const item of fish) {
-    for (const [key, catalog] of Object.entries(catalogs)) {
-      const value = item[key];
-      if (value && catalog.values[value] && !economy.atlas[key].includes(value)) economy.atlas[key].push(value);
-    }
+export function initializeLineageAtlas(economy) {
+  if ((economy.atlasVersion ?? 0) < 2) {
+    economy.atlas = {};
+    economy.atlasSightings = {};
+    economy.atlasVersion = 2;
   }
+  economy.atlas ??= {};
+  economy.atlasSightings ??= {};
+  economy.atlasFish ??= [];
+  for (const key of Object.keys(catalogs)) economy.atlas[key] ??= [];
+  for (const key of Object.keys(catalogs)) economy.atlasSightings[key] ??= {};
+}
+
+export function observeLineageFeatures(economy, item) {
+  initializeLineageAtlas(economy);
+  const discovered = [];
+  for (const [key, catalog] of Object.entries(catalogs)) {
+    const value = item[key];
+    if (!value || !catalog.values[value]) continue;
+    if (!economy.atlas[key].includes(value)) {
+      economy.atlas[key].push(value);
+      discovered.push({ key, value, name: catalog.values[value] });
+    }
+    economy.atlasSightings[key][value] ??= [];
+    if (!economy.atlasSightings[key][value].includes(item.id)) economy.atlasSightings[key][value].push(item.id);
+  }
+  if (item.id) {
+    const snapshot = {
+      id: item.id, name: item.name, species: item.species, firstSeenTank: item.tank,
+      body: item.body, tail: item.tail, dorsalFin: item.dorsalFin, ventralFin: item.ventralFin,
+      pattern: item.pattern, color: item.color, size: item.size, growthScale: item.growthScale,
+      specialSprite: item.specialSprite, eldritchStage: item.eldritchStage,
+    };
+    const existingSnapshot = economy.atlasFish.find((fish) => fish.id === item.id);
+    if (existingSnapshot) Object.assign(existingSnapshot, snapshot, { firstSeenTank: existingSnapshot.firstSeenTank });
+    else economy.atlasFish.push(snapshot);
+  }
+  return discovered;
+}
+
+export function lineageAtlasFish(economy) {
+  initializeLineageAtlas(economy);
+  return economy.atlasFish;
 }
 
 export function lineageAtlasSections(economy) {
   return Object.entries(catalogs).map(([key, catalog]) => ({
     key,
     label: catalog.label,
-    entries: Object.entries(catalog.values).map(([id, name]) => ({ id, name, discovered: economy.atlas?.[key]?.includes(id) ?? false })),
+    entries: Object.entries(catalog.values).map(([id, name]) => ({
+      id, name,
+      discovered: economy.atlas?.[key]?.includes(id) ?? false,
+      sightings: economy.atlasSightings?.[key]?.[id]?.length ?? 0,
+    })),
   }));
 }
 

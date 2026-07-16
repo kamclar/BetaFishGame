@@ -1,18 +1,29 @@
 import { plantGrowthScale, plantTypes } from "../data/plantData.js";
 import { customerCount } from "../data/customerData.js";
-import { snailPosition } from "../systems/tankSystem.js";
+import { ensureSnailResidents, snailGrowthScale, snailPosition } from "../systems/tankSystem.js";
 import { dayNightConfig } from "../config/behaviorConfig.js";
+import { waterConfig } from "../config/waterConfig.js";
+import { plantConfig } from "../config/plantConfig.js";
 
 const decorFiles = {
   vallisneria: "plant_vallisneria.png",
   anubias: "plant_anubias.png",
   redLudwigia: "plant_red_ludwigia.png",
   glowFern: "plant_glow_fern.png",
+  floatingPlant: "floating_plant.png",
+  vallisneriaPart: "part_vallisneria_leaf_v2.png",
 };
 const decorImages = new Map();
 for (const [key, file] of Object.entries(decorFiles)) {
   const image = new Image(); image.src = `./assets/decor/${file}`; decorImages.set(key, image);
 }
+const plantVisualProfiles = [
+  { width: 1, height: 1, lean: 0, fullness: 0 },
+  { width: 0.84, height: 1.1, lean: -0.035, fullness: -1 },
+  { width: 1.2, height: 0.94, lean: 0.025, fullness: 1 },
+  { width: 1.04, height: 1.04, lean: 0.075, fullness: 0 },
+];
+const algaeMaskCache = new WeakMap();
 const bottomImage = new Image();
 bottomImage.src = "./assets/decor/aquarium_bottom.png";
 const quarantineBottomImage = new Image();
@@ -21,6 +32,19 @@ const nurseryBottomImage = new Image();
 nurseryBottomImage.src = "./assets/decor/nursery_bottom.png";
 const snailImage = new Image();
 snailImage.src = "./assets/creatures/ampullaria.png";
+let snailBodyImage = null;
+snailImage.addEventListener("load", () => {
+  const body = document.createElement("canvas");
+  body.width = snailImage.naturalWidth; body.height = snailImage.naturalHeight;
+  const bodyCtx = body.getContext("2d");
+  bodyCtx.drawImage(snailImage, 0, 0);
+  bodyCtx.globalCompositeOperation = "destination-out";
+  bodyCtx.strokeStyle = "#000";
+  bodyCtx.lineWidth = 3;
+  bodyCtx.beginPath(); bodyCtx.moveTo(15, 18); bodyCtx.lineTo(13, 10); bodyCtx.lineTo(17, 1); bodyCtx.stroke();
+  bodyCtx.beginPath(); bodyCtx.moveTo(10, 25); bodyCtx.lineTo(1, 28); bodyCtx.stroke();
+  snailBodyImage = body;
+});
 const filterImages = [null, new Image(), new Image()];
 filterImages[1].src = "./assets/equipment/filter_1.png";
 filterImages[2].src = "./assets/equipment/filter_2.png";
@@ -101,7 +125,9 @@ export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   const surfaceY = getSurfaceY(view, tank);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(glass.left, surfaceY - 4, glass.width, view.height - surfaceY - 16);
+  // Rostliny na hladině mají listy i nad vodou. Samotná voda se stále kreslí
+  // až od surfaceY, ale obsah nádrže smí využít i suchou část uvnitř skla.
+  ctx.rect(glass.left, glass.top, glass.width, view.height - glass.top - 16);
   ctx.clip();
   drawWater(ctx, view, tankId, tank);
   drawTankFilter(ctx, view, tank);
@@ -118,11 +144,13 @@ export function drawDayNightOverlay(ctx, view, lightLevel, period, tank = null) 
   const surfaceY = getSurfaceY(view, tank);
   const darkness = Math.max(0, Math.min(dayNightConfig.nightOverlayMax, (1 - lightLevel) * dayNightConfig.nightOverlayMax));
   if (darkness > 0.01) {
-    const gradient = ctx.createLinearGradient(0, surfaceY, 0, view.height);
-    gradient.addColorStop(0, `rgba(13, 25, 57, ${darkness * 0.72})`);
+    const overlayTop = surfaceY - 22;
+    const gradient = ctx.createLinearGradient(0, overlayTop, 0, view.height);
+    gradient.addColorStop(0, "rgba(13, 25, 57, 0)");
+    gradient.addColorStop(0.055, `rgba(13, 25, 57, ${darkness * 0.72})`);
     gradient.addColorStop(1, `rgba(4, 10, 29, ${darkness})`);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, surfaceY - 5, view.width, view.height - surfaceY + 5);
+    ctx.fillRect(0, overlayTop, view.width, view.height - overlayTop);
   }
   if (period === "svitani" || period === "soumrak") {
     const glow = ctx.createLinearGradient(0, surfaceY, view.width, surfaceY);
@@ -150,7 +178,7 @@ function drawTankFilter(ctx, view, tank) {
     const rise = (time * (13 + bubble * 3) + bubble * 19) % 78;
     const bx = x + size * 0.52 + Math.sin(time + bubble * 2.1) * 5;
     const by = y + size * 0.22 - rise;
-    ctx.beginPath(); ctx.arc(bx, by, 2 + bubble % 2, 0, Math.PI * 2); ctx.stroke();
+    drawPixelBubble(ctx, bx, by, 2 + bubble % 2, 0.52, false, bubble + 31);
   }
   if (tank?.aerator) {
     const stoneX = x - 34;
@@ -161,7 +189,7 @@ function drawTankFilter(ctx, view, tank) {
       const rise = (time * (22 + bubble * 2) + bubble * 17) % 105;
       const bx = stoneX + Math.sin(time * 1.4 + bubble) * 9;
       const by = y + size - 12 - rise;
-      ctx.beginPath(); ctx.arc(bx, by, 1.5 + bubble % 2, 0, Math.PI * 2); ctx.stroke();
+      drawPixelBubble(ctx, bx, by, 1.5 + bubble % 2, 0.62, false, bubble + 47);
     }
   }
 }
@@ -269,15 +297,24 @@ function drawTankDirt(ctx, view, tank) {
   const debrisCount = Math.floor(debris * 95);
   if (Array.isArray(tank.debrisMap)) {
     const cellWidth = glass.width / tank.debrisMap.length;
+    ctx.fillStyle = "rgba(63, 46, 27, 0.88)";
+    ctx.beginPath(); ctx.moveTo(glass.left, bottom);
     tank.debrisMap.forEach((level, index) => {
-      const x = glass.left + index * cellWidth;
-      const ridge = ((index * 13) % 7) - 3;
-      const height = Math.max(0, Math.floor(level * 42) + ridge);
-      if (height <= 0) return;
-      ctx.fillStyle = x % 4 ? "rgba(69, 48, 27, 0.9)" : "rgba(91, 61, 31, 0.9)";
-      ctx.fillRect(x, bottom - height, Math.ceil(cellWidth + 1), height);
-      ctx.fillStyle = "rgba(121, 82, 40, 0.8)";
-      ctx.fillRect(x, bottom - height, Math.ceil(cellWidth), 2);
+      const neighbors = [tank.debrisMap[index - 1] ?? level, level, tank.debrisMap[index + 1] ?? level];
+      const smoothed = neighbors.reduce((sum, value) => sum + value, 0) / neighbors.length;
+      const x = glass.left + (index + 0.5) * cellWidth;
+      const ridge = ((index * 13) % 5) - 2;
+      ctx.lineTo(x, bottom - Math.max(1, smoothed * 25 + ridge));
+    });
+    ctx.lineTo(glass.right, bottom); ctx.closePath(); ctx.fill();
+    tank.debrisMap.forEach((level, index) => {
+      const specks = Math.floor(level * 11);
+      for (let speck = 0; speck < specks; speck += 1) {
+        const x = glass.left + index * cellWidth + ((speck * 7 + index * 3) % Math.max(2, cellWidth));
+        const y = bottom - 3 - ((speck * 11 + index * 5) % Math.max(4, 8 + level * 25));
+        ctx.fillStyle = speck % 4 === 0 ? "#87603a" : speck % 3 === 0 ? "#513a25" : "#2f2b1e";
+        ctx.fillRect(Math.round(x), Math.round(y), 2 + (speck % 2), 2);
+      }
     });
   }
   for (let i = 0; i < debrisCount; i += 1) {
@@ -303,49 +340,147 @@ export function drawGlassAlgae(ctx, view, tank) {
   if (algae <= 0.04) return;
   const glass = getGlassBounds(view);
   const map = tank.algaeMap;
-  if (Array.isArray(map) && map.length === 32 * 18) {
-    const top = getSurfaceY(view, tank) + 5;
+  const mapColumns = waterConfig.dirt.algaeMapColumns;
+  const mapRows = waterConfig.dirt.algaeMapRows;
+  if (Array.isArray(map) && map.length === mapColumns * mapRows) {
+    const fixedGlassTop = getSurfaceY(view);
+    const top = fixedGlassTop + 5;
     const width = glass.width - 10;
-    const height = view.height - getSurfaceY(view, tank) - 30;
-    const mask = document.createElement("canvas");
-    mask.width = 32; mask.height = 18;
-    const maskCtx = mask.getContext("2d");
-    map.forEach((level, index) => {
-      if (level < 0.025) return;
-      const column = index % 32, row = Math.floor(index / 32);
-      maskCtx.fillStyle = `rgba(54, 113, 45, ${Math.min(0.58, Math.pow(level, 1.18) * 0.62)})`;
-      maskCtx.fillRect(column, row, 1, 1);
-    });
+    const substrateTop = view.height - 56;
+    const height = Math.max(40, substrateTop - top);
+    const signature = algaeMapSignature(map);
+    let cached = algaeMaskCache.get(tank);
+    if (!cached || cached.signature !== signature) {
+      cached = { signature, mask: createAlgaeMask(map, mapColumns, mapRows) };
+      algaeMaskCache.set(tank, cached);
+    }
+    const mask = cached.mask;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(mask, glass.left + 5, top, width, height);
+    for (let candidate = 0; candidate < 72; candidate += 1) {
+      const normalizedX = 0.015 + stableVisualNoise(candidate, 21.4) * 0.97;
+      const normalizedY = 0.018 + stableVisualNoise(candidate, 36.7) * 0.94;
+      const level = sampleAlgaeMap(map, normalizedX * (mapColumns - 1), normalizedY * (mapRows - 1), mapColumns, mapRows);
+      const visibility = stableVisualNoise(candidate, 52.3);
+      if (level < 0.5 || visibility > Math.min(0.92, level * 1.08)) continue;
+      const x = glass.left + 5 + normalizedX * width;
+      const y = top + normalizedY * height;
+      const radius = 1.3 + stableVisualNoise(candidate, 68.1) * 4.2 + level * 0.7;
+      drawPixelBubble(ctx, x, y, radius, 0.24 + level * 0.5, true, candidate + 101);
+    }
     ctx.restore();
   }
   ctx.globalAlpha = 1;
 }
 
+function sampleAlgaeMap(map, x, y, columns, rows) {
+  const x0 = Math.max(0, Math.min(columns - 1, Math.floor(x)));
+  const y0 = Math.max(0, Math.min(rows - 1, Math.floor(y)));
+  const x1 = Math.min(columns - 1, x0 + 1);
+  const y1 = Math.min(rows - 1, y0 + 1);
+  const tx = x - x0;
+  const ty = y - y0;
+  const top = map[y0 * columns + x0] * (1 - tx) + map[y0 * columns + x1] * tx;
+  const bottom = map[y1 * columns + x0] * (1 - tx) + map[y1 * columns + x1] * tx;
+  return top * (1 - ty) + bottom * ty;
+}
+
+function algaeMapSignature(map) {
+  let signature = 17;
+  for (const level of map) signature = (signature * 31 + Math.round(level * 4096)) | 0;
+  return signature;
+}
+
+function createAlgaeMask(map, mapColumns, mapRows) {
+  const mask = document.createElement("canvas");
+  mask.width = 160; mask.height = 90;
+  const maskCtx = mask.getContext("2d");
+  const pixels = maskCtx.createImageData(mask.width, mask.height);
+  for (let pixelY = 0; pixelY < mask.height; pixelY += 1) {
+    for (let pixelX = 0; pixelX < mask.width; pixelX += 1) {
+      const mapX = pixelX / (mask.width - 1) * (mapColumns - 1);
+      const mapY = pixelY / (mask.height - 1) * (mapRows - 1);
+      const level = sampleAlgaeMap(map, mapX, mapY, mapColumns, mapRows);
+      if (level < 0.018) continue;
+      const broadNoise = Math.sin(pixelX * 0.19 + pixelY * 0.11)
+        + Math.sin(pixelX * 0.071 - pixelY * 0.16 + 1.7)
+        + Math.sin(pixelX * 0.037 + pixelY * 0.049 + 4.1);
+      const fineNoise = Math.sin(pixelX * 1.73 + pixelY * 2.17) * 0.5;
+      const organicLevel = Math.max(0, Math.min(1, level + broadNoise * 0.025 + fineNoise * 0.012));
+      const variation = Math.max(-1, Math.min(1, broadNoise / 3));
+      const upperEdge = Math.max(0,
+        2.2
+        + Math.sin(pixelX * 0.115 + 0.7) * 1.35
+        + Math.sin(pixelX * 0.037 + 2.4) * 1.1
+        + Math.sin(pixelX * 0.29) * 0.45);
+      const lowerEdge = mask.height - 1 - Math.max(0,
+        2.4
+        + Math.sin(pixelX * 0.097 + 1.2) * 1.55
+        + Math.sin(pixelX * 0.031 + 4.5) * 1.15
+        + Math.sin(pixelX * 0.24 + 2.1) * 0.55);
+      const upperOpacity = Math.max(0, Math.min(1, (pixelY - upperEdge + 1.2) / 3.2));
+      const lowerOpacity = Math.max(0, Math.min(1, (lowerEdge - pixelY + 1.2) / 3.2));
+      const edgeOpacity = Math.min(upperOpacity, lowerOpacity);
+      const offset = (pixelY * mask.width + pixelX) * 4;
+      pixels.data[offset] = Math.round(55 + variation * 16 + organicLevel * 17);
+      pixels.data[offset + 1] = Math.round(94 + variation * 21 + organicLevel * 24);
+      pixels.data[offset + 2] = Math.round(43 + variation * 11);
+      pixels.data[offset + 3] = Math.round(255 * Math.min(0.94, Math.pow(organicLevel, 1.12) * 0.98) * edgeOpacity);
+    }
+  }
+  maskCtx.putImageData(pixels, 0, 0);
+  return mask;
+}
+
 function drawSnails(ctx, view, tank) {
-  const count = tank?.snails ?? 0;
-  if (!count) return;
+  if (!tank) return;
+  const snailResidents = ensureSnailResidents(tank);
+  if (!snailResidents.length) return;
   const glass = getGlassBounds(view);
-  const waterHeight = view.height - getSurfaceY(view) - 100;
-  for (let i = 0; i < count; i += 1) {
+  // Sneci lezou po skle, ne po vodnim sloupci. Pri odpousteni proto zustavaji na miste.
+  const surfaceY = getSurfaceY(view);
+  const waterHeight = view.height - surfaceY - 100;
+  for (let i = 0; i < snailResidents.length; i += 1) {
     const now = Date.now();
     const position = snailPosition(i, now);
     const previous = snailPosition(i, now - 1200);
     const x = glass.left + 22 + position.x * (glass.width - 44);
-    const y = getSurfaceY(view) + 40 + position.y * waterHeight;
+    const y = surfaceY + 40 + position.y * waterHeight;
     if (snailImage.complete && snailImage.naturalWidth > 0) {
+      const snail = snailResidents[i];
+      const growth = snailGrowthScale(snail);
+      const size = waterConfig.snails.adultSize * growth;
       ctx.save();
       ctx.translate(x, y);
       const dx = position.x - previous.x;
       const dy = position.y - previous.y;
       ctx.rotate(Math.atan2(dy, dx) - Math.PI);
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(snailImage, -20, -20, 40, 40);
+      ctx.drawImage(snailBodyImage ?? snailImage, -size / 2, -size / 2, size, size);
+      drawSnailAntennae(ctx, snail, size, now);
       ctx.restore();
     }
   }
+}
+
+function drawSnailAntennae(ctx, snail, size, now) {
+  const unit = size / 40;
+  const phase = (snail.antennaPhase ?? 0) + now * waterConfig.snails.antennaSpeed;
+  const upperWave = Math.sin(phase) * 2.2 + Math.sin(phase * 0.37 + 1.1) * 1.2;
+  const lowerWave = Math.sin(phase * 0.71 + 2.4) * 2 + Math.sin(phase * 0.29) * 1.1;
+  ctx.strokeStyle = "#ead879";
+  ctx.lineWidth = Math.max(1, unit);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-8 * unit, -1 * unit);
+  ctx.quadraticCurveTo(-14 * unit, (-8 + upperWave) * unit, (-13 + upperWave * 0.45) * unit, -17 * unit * waterConfig.snails.antennaReach);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-9 * unit, 2 * unit);
+  ctx.quadraticCurveTo(-15 * unit, (1 + lowerWave) * unit, -20 * unit * waterConfig.snails.antennaReach, (5 + lowerWave) * unit);
+  ctx.stroke();
+  ctx.lineCap = "butt";
 }
 
 function drawEggClutch(ctx, view, eggs) {
@@ -387,6 +522,12 @@ export function drawFoodParticles(ctx, foodParticles) {
 
 export function drawLiquidClouds(ctx, liquidClouds) {
   for (const cloud of liquidClouds) {
+    if (cloud.settling) {
+      const alpha = Math.max(0, Math.min(0.82, cloud.life / Math.min(2.5, cloud.maxLife)));
+      ctx.fillStyle = `rgba(${cloud.color}, ${alpha})`;
+      ctx.fillRect(Math.round(cloud.x), Math.round(cloud.y), cloud.radius, cloud.radius);
+      continue;
+    }
     const alpha = Math.max(0, Math.min(0.34, cloud.life / cloud.maxLife));
     const radius = cloud.radius;
     const gradient = ctx.createRadialGradient(cloud.x, cloud.y, 0, cloud.x, cloud.y, radius);
@@ -408,11 +549,12 @@ export function drawLiquidClouds(ctx, liquidClouds) {
 }
 
 export function drawGlass(ctx, view) {
-  const surfaceY = getSurfaceY(view);
   const glass = getGlassBounds(view);
   const left = glass.left;
   const right = glass.right;
-  const top = surfaceY;
+  // Skleněné stěny sahají až k horní liště okna. Hladina je samostatná
+  // hodnota, takže nad ní zůstává otevřená, prázdná část akvária.
+  const top = glass.top;
   const bottom = view.height - 20;
   const r = Math.min(16, (right - left) / 2, (bottom - top) / 2);
 
@@ -454,6 +596,7 @@ export function getGlassBounds(view) {
     left,
     right,
     width: right - left,
+    top: 4,
     bottomInset: 0,
     wall: 5,
   };
@@ -492,19 +635,89 @@ function drawWater(ctx, view, tankId, tank) {
       : ["rgba(79, 206, 225, 0.62)", "rgba(20, 152, 188, 0.58)", "rgba(8, 88, 126, 0.68)"];
   gradient.addColorStop(0, water[0]); gradient.addColorStop(0.55, water[1]); gradient.addColorStop(1, water[2]);
   ctx.fillStyle = gradient;
-  ctx.fillRect(glass.left, surfaceY, glass.width, view.height - surfaceY - glass.bottomInset);
+  const surfaceTime = performance.now() / 5200;
+  const rippleNow = performance.now();
+  const ripples = (tank?.surfaceRipples ?? []).filter((ripple) =>
+    (rippleNow - ripple.createdAt) / 1000 < waterConfig.maintenance.refillRippleLifetime);
+  if (tank?.surfaceRipples) tank.surfaceRipples = ripples;
+  const waveAt = (x) => {
+    const across = (x - glass.left) / Math.max(1, glass.width);
+    let y = surfaceY
+      + Math.sin(across * Math.PI * 6.2 + surfaceTime) * 3.2
+      + Math.sin(across * Math.PI * 3.4 - surfaceTime * 0.63 + 0.8) * 1.7
+      + Math.sin(across * Math.PI * 10.5 + surfaceTime * 0.31 + 2.1) * 0.7;
+    for (const ripple of ripples) {
+      const age = (rippleNow - ripple.createdAt) / 1000;
+      const life = Math.max(0, 1 - age / waterConfig.maintenance.refillRippleLifetime);
+      const distance = Math.abs(x - ripple.x);
+      const front = waterConfig.maintenance.refillRippleSpeed * age;
+      const fromFront = distance - front;
+      const envelope = Math.exp(-(fromFront * fromFront) / (2 * waterConfig.maintenance.refillRippleWidth ** 2));
+      y += Math.sin(fromFront * 0.2) * waterConfig.maintenance.refillRippleAmplitude * ripple.strength * life * envelope;
+    }
+    return y;
+  };
+  const highlightAt = (x) => {
+    const across = (x - glass.left) / Math.max(1, glass.width);
+    return waveAt(x) + 1.7 + Math.sin(across * Math.PI * 4.6 - surfaceTime * 0.48 + 1.1) * 2.4;
+  };
 
-  ctx.strokeStyle = "rgba(235, 255, 250, 0.86)";
-  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(glass.left, surfaceY);
-  for (let x = glass.left; x <= glass.right; x += 18) {
-    const wave = Math.sin(performance.now() / 950 + x * 0.025) * 2;
-    ctx.lineTo(x, surfaceY + wave);
-  }
-  ctx.stroke();
+  traceWaterSurface(ctx, glass, waveAt, 3);
+  ctx.lineTo(glass.right, view.height - glass.bottomInset);
+  ctx.lineTo(glass.left, view.height - glass.bottomInset);
+  ctx.closePath();
+  ctx.fill();
+
+  // Tenká souvislá hrana drží hladinu čitelnou. Jednotlivé světelné úseky
+  // nad ní mají různou šířku, takže nepůsobí jako dokonale rovná UI linka.
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(35, 132, 175, 0.72)";
+  ctx.lineWidth = 7;
+  ctx.beginPath(); traceWaterSurface(ctx, glass, waveAt, 1); ctx.stroke();
+  ctx.strokeStyle = "rgba(198, 236, 237, 0.66)";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath(); traceWaterSurface(ctx, glass, highlightAt, 1.5); ctx.stroke();
+  ctx.fillStyle = "rgba(255, 255, 246, 0.96)";
+  drawVariableSurfaceHighlight(ctx, glass, highlightAt, (x) => {
+    const across = (x - glass.left) / Math.max(1, glass.width);
+    const crest = Math.max(-1, Math.min(1, (surfaceY - waveAt(x)) / 5.5));
+    const crestRelation = Math.sin(surfaceTime * 0.78 + 0.4);
+    const driftingPattern = Math.sin(across * Math.PI * 5.1 - surfaceTime * 1.22)
+      + Math.sin(across * Math.PI * 11.7 + surfaceTime * 0.63 + 1.8) * 0.55
+      + Math.sin(across * Math.PI * 2.4 - surfaceTime * 0.31) * 0.35;
+    const energy = Math.max(0, Math.min(1, 0.4 + driftingPattern * 0.38 + crest * crestRelation * 0.46));
+    return 0.04 + Math.pow(energy, 1.7) * 7.8;
+  });
+  ctx.restore();
 
   drawBottomDecor(ctx, view, tankId);
+}
+
+function traceWaterSurface(ctx, glass, waveAt, offset = 0) {
+  ctx.moveTo(glass.left, waveAt(glass.left) + offset);
+  for (let x = glass.left + 8; x < glass.right; x += 8) ctx.lineTo(x, waveAt(x) + offset);
+  ctx.lineTo(glass.right, waveAt(glass.right) + offset);
+}
+
+function drawVariableSurfaceHighlight(ctx, glass, waveAt, thicknessAt) {
+  const points = [];
+  for (let x = glass.left; x < glass.right; x += 4) points.push({ x, y: waveAt(x), thickness: thicknessAt(x) });
+  points.push({ x: glass.right, y: waveAt(glass.right), thickness: thicknessAt(glass.right) });
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y - points[0].thickness * 0.5);
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    ctx.lineTo(point.x, point.y - point.thickness * 0.5);
+  }
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const point = points[index];
+    ctx.lineTo(point.x, point.y + point.thickness * 0.5);
+  }
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawBottomDecor(ctx, view, tankId) {
@@ -552,101 +765,278 @@ function drawBottomDecor(ctx, view, tankId) {
 
 function drawPlants(ctx, view, plants, tank) {
   const surfaceY = getSurfaceY(view, tank);
+  const plantedSurfaceY = getSurfaceY(view);
   for (const plant of plants) {
     const baseY = view.height - 46;
     const type = plantTypes[plant.type] ?? plantTypes.vallisneria;
     const growthScale = plantGrowthScale(plant);
-    const currentHeight = plant.h * growthScale;
     const sprite = decorImages.get(plant.type);
-    if (sprite?.complete && sprite.naturalWidth > 0) {
-      const scale = currentHeight / 160;
-      const width = 96 * scale;
-      const sway = Math.sin(performance.now() / 1500 + plant.sway) * 0.025;
-      ctx.save();
-      ctx.translate(plant.x, baseY);
-      ctx.rotate(sway);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(sprite, -width / 2, -currentHeight, width, currentHeight);
-      ctx.restore();
+    if (type.shape === "floating") {
+      drawFloatingPlant(ctx, sprite, plant, surfaceY, view);
       continue;
     }
-    const topY = Math.max(surfaceY + 18, baseY - currentHeight);
+    // Korenujici rostliny maji velikost podle pevne vysky nadrze, nikoli podle prave odpustene vody.
+    const availableHeight = Math.max(40, baseY - plantedSurfaceY - 14);
+    const matureHeight = Math.max(plant.h, availableHeight * (type.heightPotential ?? 0.72));
+    const currentHeight = Math.min(availableHeight, matureHeight * growthScale);
+    const topY = Math.max(plantedSurfaceY + 18, baseY - currentHeight);
     const time = performance.now() / 1400 + plant.sway;
-    if (type.shape === "ribbon") drawRibbonPlant(ctx, plant.x, baseY, topY, time, type.colors);
-    if (type.shape === "broad") drawBroadPlant(ctx, plant.x, baseY, currentHeight, time, type.colors);
-    if (type.shape === "stem") drawStemPlant(ctx, plant.x, baseY, topY, time, type.colors);
-    if (type.shape === "fern") drawFernPlant(ctx, plant.x, baseY, topY, time, type.colors);
+    const stage = Math.max(0.05, Math.min(1, plant.growthStage ?? 0.12));
+    if (type.shape === "ribbon" && drawModularBottomPlant(ctx, plant, type, baseY, currentHeight, stage, time)) continue;
+    if (drawStagedOriginalPlant(ctx, sprite, plant, type, baseY, availableHeight, stage, time)) continue;
+    if (type.shape === "ribbon") drawRibbonPlant(ctx, plant.x, baseY, topY, time, type.colors, stage);
+    if (type.shape === "broad") drawBroadPlant(ctx, plant.x, baseY, currentHeight, time, type.colors, stage);
+    if (type.shape === "stem") drawStemPlant(ctx, plant.x, baseY, topY, time, type.colors, stage);
+    if (type.shape === "fern") drawFernPlant(ctx, plant.x, baseY, topY, time, type.colors, stage);
   }
 }
 
-function drawRibbonPlant(ctx, x, baseY, topY, time, colors) {
-  for (let leaf = 0; leaf < 7; leaf += 1) {
-    const offset = (leaf - 3) * 5;
+function drawStagedOriginalPlant(ctx, image, plant, type, baseY, availableHeight, stage, time) {
+  if (type.shape === "floating" || type.shape === "ribbon" || !image?.complete || image.naturalWidth === 0) return false;
+  const phase = stage < plantConfig.growth.stages.medium ? 0 : stage < plantConfig.growth.stages.adult ? 1 : 2;
+  const variant = getPlantVisualVariant(plant);
+  const profile = plantVisualProfiles[variant];
+  const heightRange = plantConfig.growth.matureHeightFractionByType[plant.type]
+    ?? plantConfig.growth.fallbackMatureHeightFraction;
+  const matureHeightFraction = heightRange.min
+    + (heightRange.max - heightRange.min) * seededPlantValue(plant, 411);
+  const matureHeight = availableHeight * matureHeightFraction;
+  const smallHeight = Math.min(plant.h, availableHeight * 0.21);
+  const phaseHeights = [smallHeight, Math.min(matureHeight * 0.76, smallHeight * 1.32), matureHeight];
+  const mainHeight = phase === 2 ? matureHeight : Math.min(matureHeight, phaseHeights[phase] * profile.height);
+  const aspect = image.naturalWidth / image.naturalHeight;
+  const mainWidth = mainHeight * aspect * (phase === 0 ? 1 : phase === 1 ? 1.08 : 1.16) * profile.width;
+  const sway = Math.sin(time * 0.55) * 0.008 + profile.lean;
+  const mirrored = variant === 1 || variant === 3;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (phase >= 1) {
+    drawOriginalPlantLayer(ctx, image, plant.x - mainWidth * (0.22 + variant * 0.015), baseY + 1, mainWidth * 0.7, mainHeight * 0.72, -0.12 + sway, !mirrored);
+    drawOriginalPlantLayer(ctx, image, plant.x + mainWidth * (0.23 + (3 - variant) * 0.012), baseY, mainWidth * 0.68, mainHeight * 0.68, 0.13 + sway, mirrored);
+  }
+  if (phase >= 2) {
+    const side = seededPlantValue(plant, 214) > 0.5 ? 1 : -1;
+    drawOriginalPlantLayer(ctx, image, plant.x + side * mainWidth * 0.38, baseY + 2, mainWidth * 0.54, mainHeight * 0.52, side * 0.2 + sway, side < 0);
+    if (profile.fullness >= 0) drawOriginalPlantLayer(ctx, image, plant.x - side * mainWidth * 0.16, baseY - 1, mainWidth * 0.48, mainHeight * 0.6, -side * 0.07 + sway, side > 0);
+    if (profile.fullness > 0) drawOriginalPlantLayer(ctx, image, plant.x - side * mainWidth * 0.36, baseY + 3, mainWidth * 0.44, mainHeight * 0.46, -side * 0.24 + sway, side < 0);
+  }
+  drawOriginalPlantLayer(ctx, image, plant.x, baseY, mainWidth, mainHeight, sway, mirrored);
+  ctx.restore();
+  return true;
+}
+
+function drawOriginalPlantLayer(ctx, image, x, baseY, width, height, rotation, mirrored = false) {
+  ctx.save();
+  ctx.translate(x, baseY);
+  ctx.rotate(rotation);
+  if (mirrored) ctx.scale(-1, 1);
+  ctx.drawImage(image, -width / 2, -height, width, height);
+  ctx.restore();
+}
+
+function getPlantVisualVariant(plant) {
+  const stored = Number.isInteger(plant.visualVariant) ? plant.visualVariant : Math.floor(seededPlantValue(plant, 310) * plantVisualProfiles.length);
+  return ((stored % plantVisualProfiles.length) + plantVisualProfiles.length) % plantVisualProfiles.length;
+}
+
+function drawModularBottomPlant(ctx, plant, type, baseY, height, stage, time) {
+  const partKey = type.shape === "ribbon" ? "vallisneriaPart" : null;
+  const image = partKey ? decorImages.get(partKey) : null;
+  if (!image?.complete || image.naturalWidth === 0) return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (type.shape === "ribbon") drawVallisneriaParts(ctx, image, plant, baseY, height, stage, time);
+  ctx.restore();
+  return true;
+}
+
+function drawVallisneriaParts(ctx, image, plant, baseY, height, stage, time) {
+  const profile = plantVisualProfiles[getPlantVisualVariant(plant)];
+  const count = Math.max(2, 2 + Math.floor(stage * 5) + profile.fullness);
+  for (let leaf = 0; leaf < count; leaf += 1) {
+    const spread = (leaf - (count - 1) / 2) * (3.5 + stage * 1.6) * profile.width;
+    const variation = seededPlantValue(plant, leaf);
+    const leafHeight = Math.min(height * 1.08, height * (0.58 + variation * 0.42) * profile.height);
+    const leafWidth = 7 + variation * 4 + stage * 2;
+    const rotation = (variation - 0.5) * 0.34 + profile.lean + Math.sin(time + leaf * 0.7) * 0.025;
+    drawAnchoredPart(ctx, image, plant.x + spread, baseY, leafWidth, leafHeight, rotation);
+  }
+}
+
+function drawAnchoredPart(ctx, image, x, y, width, height, rotation) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+  ctx.drawImage(image, -width / 2, -height, width, height);
+  ctx.restore();
+}
+
+function seededPlantValue(plant, index) {
+  const seed = (plant.sway ?? 0) * 17.17 + index * 12.9898 + plant.x * 0.031;
+  return Math.abs(Math.sin(seed) * 43758.5453) % 1;
+}
+
+function drawFloatingPlant(ctx, sprite, plant, surfaceY, view) {
+  if (!sprite?.complete || sprite.naturalWidth === 0) return;
+  const stage = Math.max(0, Math.min(1, plant.growthStage ?? 0.12));
+  const profile = plantVisualProfiles[getPlantVisualVariant(plant)];
+  const width = (plantConfig.floating.minWidth
+    + (plantConfig.floating.maxWidth - plantConfig.floating.minWidth) * stage) * profile.width;
+  const rootRoom = Math.max(80, view.height - 54 - surfaceY);
+  const height = Math.min(width * 2 * profile.height, rootRoom * plantConfig.floating.rootDepth);
+  const sourceX = plant.flowering ? 865 : 190;
+  const bob = Math.sin(performance.now() / 1300 + (plant.sway ?? 0)) * 1.5;
+  const drift = Math.sin(performance.now() / 4600 + (plant.flowerPhase ?? 0)) * 5;
+  ctx.save();
+  ctx.translate(plant.x + drift, surfaceY - 22 + bob);
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalAlpha = 0.72 + (plant.condition ?? 0.7) * 0.28;
+  ctx.drawImage(sprite, sourceX, 50, 460, 920, -width / 2, 0, width, height);
+  const daughters = Math.max(0, Math.floor((stage - 0.42) * 5) + profile.fullness);
+  for (let daughter = 0; daughter < daughters; daughter += 1) {
+    const side = daughter % 2 ? 1 : -1;
+    const childWidth = 34 + stage * 12 - daughter * 2;
+    const childHeight = Math.min(height * (0.48 + daughter * 0.06), rootRoom * 0.55);
+    ctx.drawImage(sprite, 190, 50, 460, 920,
+      side * (width * 0.42 + daughter * 8) - childWidth / 2, 7 + daughter * 3, childWidth, childHeight);
+  }
+  ctx.restore();
+}
+
+function drawRibbonPlant(ctx, x, baseY, topY, time, colors, stage) {
+  const leafCount = 2 + Math.floor(stage * 7);
+  for (let leaf = 0; leaf < leafCount; leaf += 1) {
+    const offset = (leaf - (leafCount - 1) / 2) * 5;
     const sway = Math.sin(time + leaf * 0.7) * (5 + leaf % 3);
-    ctx.strokeStyle = colors[leaf % colors.length];
-    ctx.lineWidth = 3 + (leaf % 2);
-    ctx.beginPath();
-    ctx.moveTo(x + offset, baseY);
-    ctx.bezierCurveTo(x + offset - sway, baseY - 28, x + sway, topY + 28, x + sway, topY);
-    ctx.stroke();
+    const leafTop = baseY - (baseY - topY) * (0.68 + ((leaf * 17) % 29) / 90);
+    drawPixelCurve(ctx, colors[leaf % colors.length], 2 + (leaf % 2), 2, (t) => ({
+      x: x + offset + sway * t * t + Math.sin(t * Math.PI) * (leaf % 2 ? 4 : -3),
+      y: baseY + (leafTop - baseY) * t,
+    }));
   }
 }
 
-function drawBroadPlant(ctx, x, baseY, height, time, colors) {
-  ctx.strokeStyle = colors[0];
-  ctx.lineWidth = 4;
-  for (let leaf = 0; leaf < 6; leaf += 1) {
-    const angle = -1.25 + leaf * 0.5;
+function drawBroadPlant(ctx, x, baseY, height, time, colors, stage) {
+  const leafCount = 2 + Math.floor(stage * 7);
+  for (let leaf = 0; leaf < leafCount; leaf += 1) {
+    const angle = -1.35 + leaf * (2.7 / Math.max(1, leafCount - 1));
     const length = height * (0.55 + (leaf % 3) * 0.12);
     const endX = x + Math.cos(angle) * length * 0.48 + Math.sin(time + leaf) * 2;
     const endY = baseY - Math.sin(-angle) * 8 - length * 0.72;
-    ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(endX, endY); ctx.stroke();
-    ctx.fillStyle = colors[1 + leaf % 2];
-    ctx.beginPath(); ctx.ellipse(endX, endY, 11, 5, angle, 0, Math.PI * 2); ctx.fill();
+    drawPixelLine(ctx, x, baseY, endX, endY, colors[0], 3);
+    drawPixelLeaf(ctx, endX, endY, 7 + Math.floor(stage * 4), 4 + Math.floor(stage * 2), colors[1 + leaf % 2], angle);
   }
 }
 
-function drawStemPlant(ctx, x, baseY, topY, time, colors) {
-  for (let stem = -1; stem <= 1; stem += 1) {
-    const sx = x + stem * 10;
+function drawStemPlant(ctx, x, baseY, topY, time, colors, stage) {
+  const stemCount = 1 + Math.floor(stage * 4);
+  for (let stemIndex = 0; stemIndex < stemCount; stemIndex += 1) {
+    const stem = stemIndex - (stemCount - 1) / 2;
+    const sx = x + stem * 9;
     const sway = Math.sin(time + stem) * 5;
-    ctx.strokeStyle = colors[0]; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(sx, baseY); ctx.quadraticCurveTo(sx - sway, (baseY + topY) / 2, sx + sway, topY + Math.abs(stem) * 10); ctx.stroke();
+    const stemTop = topY + Math.abs(stem) * 12;
+    drawPixelCurve(ctx, colors[0], 3, 2, (t) => ({ x: sx + sway * t * t, y: baseY + (stemTop - baseY) * t }));
     for (let y = baseY - 18; y > topY + 5; y -= 17) {
       const side = ((y / 17 + stem) | 0) % 2 ? -1 : 1;
-      ctx.fillStyle = colors[1 + Math.abs(stem) % 2];
-      ctx.beginPath(); ctx.ellipse(sx + sway * 0.5 + side * 8, y, 8, 4, side * 0.45, 0, Math.PI * 2); ctx.fill();
+      if (y < stemTop) continue;
+      drawPixelLeaf(ctx, sx + sway * 0.5 + side * 7, y, 7, 3, colors[1 + Math.abs(Math.round(stem)) % 2], side * 0.4);
     }
   }
 }
 
-function drawFernPlant(ctx, x, baseY, topY, time, colors) {
-  const sway = Math.sin(time) * 5;
-  ctx.strokeStyle = colors[0]; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(x, baseY); ctx.quadraticCurveTo(x - sway, (baseY + topY) / 2, x + sway, topY); ctx.stroke();
-  const steps = 7;
-  for (let i = 1; i <= steps; i += 1) {
-    const t = i / (steps + 1);
-    const y = baseY + (topY - baseY) * t;
-    const width = 18 * (1 - t * 0.55);
-    ctx.strokeStyle = i % 3 === 0 ? colors[2] : colors[1]; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - width + sway * t, y - 8); ctx.moveTo(x, y); ctx.lineTo(x + width + sway * t, y - 8); ctx.stroke();
+function drawFernPlant(ctx, x, baseY, topY, time, colors, stage) {
+  const frondCount = 2 + Math.floor(stage * 5);
+  for (let frond = 0; frond < frondCount; frond += 1) {
+    const offset = frond - (frondCount - 1) / 2;
+    const startX = x + offset * 5;
+    const frondTop = topY + Math.abs(offset) * 13;
+    const sway = Math.sin(time + frond * 0.8) * (4 + Math.abs(offset));
+    drawPixelCurve(ctx, colors[0], 3, 2, (t) => ({ x: startX + sway * t * t, y: baseY + (frondTop - baseY) * t }));
+    const steps = Math.max(2, Math.floor((baseY - frondTop) / 16));
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / (steps + 1);
+      const y = baseY + (frondTop - baseY) * t;
+      const width = (8 + stage * 11) * (1 - t * 0.5);
+      const centerX = startX + sway * t * t;
+      const color = i % 3 === 0 ? colors[2] : colors[1];
+      drawPixelLine(ctx, centerX, y, centerX - width, y - 7, color, 2);
+      drawPixelLine(ctx, centerX, y, centerX + width, y - 7, color, 2);
+    }
+  }
+}
+
+function drawPixelCurve(ctx, color, size, step, pointAt) {
+  ctx.fillStyle = color;
+  for (let t = 0; t <= 1; t += 1 / 80) {
+    const point = pointAt(t);
+    ctx.fillRect(Math.round(point.x / step) * step, Math.round(point.y / step) * step, size, size);
+  }
+}
+
+function drawPixelLine(ctx, startX, startY, endX, endY, color, size = 2) {
+  const distance = Math.max(1, Math.hypot(endX - startX, endY - startY));
+  ctx.fillStyle = color;
+  for (let traveled = 0; traveled <= distance; traveled += 2) {
+    const t = traveled / distance;
+    ctx.fillRect(Math.round(startX + (endX - startX) * t), Math.round(startY + (endY - startY) * t), size, size);
+  }
+}
+
+function drawPixelLeaf(ctx, centerX, centerY, radiusX, radiusY, color, angle = 0) {
+  const cosine = Math.cos(angle), sine = Math.sin(angle);
+  ctx.fillStyle = color;
+  for (let py = -radiusY; py <= radiusY; py += 2) {
+    const halfWidth = radiusX * Math.sqrt(Math.max(0, 1 - (py * py) / (radiusY * radiusY)));
+    for (let px = -halfWidth; px <= halfWidth; px += 2) {
+      const x = centerX + px * cosine - py * sine;
+      const y = centerY + px * sine + py * cosine;
+      ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+    }
   }
 }
 
 function drawBubbles(ctx, view, tank) {
   const now = performance.now() / 900;
   const surfaceY = getSurfaceY(view, tank);
-  ctx.strokeStyle = "rgba(190, 236, 239, 0.42)";
-  for (let i = 0; i < 22; i += 1) {
-    const x = 40 + ((i * 97) % Math.max(80, view.width - 80));
+  const glass = getGlassBounds(view);
+  for (let i = 0; i < 18; i += 1) {
+    const xSeed = stableVisualNoise(i, 3.7);
+    const speedSeed = stableVisualNoise(i, 8.1);
+    const sizeSeed = stableVisualNoise(i, 12.4);
+    const baseX = glass.left + 22 + xSeed * Math.max(40, glass.width - 44);
+    const x = baseX + Math.sin(now * (0.28 + speedSeed * 0.45) + i * 1.83) * (2 + speedSeed * 7);
     const waterHeight = view.height - surfaceY - 26;
-    const y = view.height - 24 - (((now * (18 + (i % 5) * 8) + i * 41) % waterHeight));
-    const r = 2 + (i % 4);
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
+    const rise = (now * (13 + speedSeed * 36) + stableVisualNoise(i, 17.9) * waterHeight) % waterHeight;
+    const y = view.height - 24 - rise;
+    const r = sizeSeed > 0.9 ? 5 : sizeSeed > 0.64 ? 3 : sizeSeed > 0.24 ? 2 : 1.5;
+    drawPixelBubble(ctx, x, y, r, 0.3 + sizeSeed * 0.26, false, i);
   }
+}
+
+function drawPixelBubble(ctx, x, y, radius, alpha, trapped, variant = 0) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const r = Math.max(2, Math.round(radius));
+  if (trapped) {
+    ctx.fillStyle = `rgba(205, 234, 218, ${alpha * 0.16})`;
+    ctx.fillRect(px - r + 1, py - r + 1, r * 2 - 2, r * 2 - 2);
+  }
+  ctx.fillStyle = `rgba(224, 248, 241, ${alpha})`;
+  const outlinePoints = 14 + r * 2;
+  for (let point = 0; point < outlinePoints; point += 1) {
+    if ((point + variant * 3) % 11 === 0) continue;
+    const angle = point / outlinePoints * Math.PI * 2;
+    const wobble = 1 + (stableVisualNoise(point + variant * 19, 4.2) - 0.5) * 0.18;
+    const pointX = px + Math.cos(angle) * r * wobble;
+    const pointY = py + Math.sin(angle) * r * (0.88 + wobble * 0.12);
+    ctx.fillRect(Math.round(pointX), Math.round(pointY), 1, 1);
+  }
+  ctx.fillStyle = `rgba(255, 255, 249, ${Math.min(0.95, alpha * 1.45)})`;
+  ctx.fillRect(px - Math.max(1, Math.floor(r * 0.45)), py - Math.max(1, Math.floor(r * 0.5)), 1 + (r > 4 ? 1 : 0), 1);
+}
+
+function stableVisualNoise(index, salt = 0) {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 function drawRock(ctx, x, y, width, color) {

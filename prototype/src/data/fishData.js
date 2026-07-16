@@ -206,11 +206,11 @@ export const fish = [
     dir: 1,
     size: 2,
     color: "amber",
-    body: "diamond",
-    tail: "fork",
-    dorsalFin: "sail",
-    ventralFin: "paired",
-    pattern: "spots",
+    body: "torpedo",
+    tail: "lyre",
+    dorsalFin: "low",
+    ventralFin: "sickle",
+    pattern: "blotches",
     specialSprite: null,
     phase: 0.7,
   },
@@ -240,10 +240,10 @@ export const fish = [
     dir: -1,
     size: 1.9,
     color: "magenta",
-    body: "eel",
-    tail: "veil",
-    dorsalFin: "spiky",
-    ventralFin: "ribbon",
+    body: "humpback",
+    tail: "double",
+    dorsalFin: "crown",
+    ventralFin: "whisker",
     pattern: "stripe",
     specialSprite: null,
     phase: 2.1,
@@ -274,10 +274,10 @@ export const fish = [
     dir: 1,
     size: 2.15,
     color: "emerald",
-    body: "stocky",
-    tail: "broad",
-    dorsalFin: "normal",
-    ventralFin: "normal",
+    body: "teardrop",
+    tail: "paddle",
+    dorsalFin: "rounded",
+    ventralFin: "fan",
     pattern: "glow",
     specialSprite: null,
     phase: 4.5,
@@ -293,13 +293,60 @@ const starterSchool = [
 
 export function ensureStarterSchool(items = fish) {
   for (const [id, name, x, y, dir, color, pattern, ageDays] of starterSchool) {
-    if (items.some((item) => item.id === id)) continue;
+    const existing = items.find((item) => item.id === id);
+    if (existing) {
+      // Členové startovního hejna nesou viditelné genetické varianty. Celý
+      // glassArrow sprite by jejich barvu a kresbu přemaloval jedním obrázkem.
+      Object.assign(existing, {
+        body: "slender", tail: "short", dorsalFin: "normal", ventralFin: "normal",
+        color, pattern, specialSprite: null,
+      });
+      continue;
+    }
     items.push({
     id, name, species: "Sklenena strelka", rarity: "Common", age: `${ageDays} dni`, ageDays,
     health: 94, stress: 6, hunger: 26, healthNote: "Drzi se ostatnich rybek sveho druhu.",
     symptoms: [], diseases: [], history: ["Pochazi z prvniho maleho hejna."], traits: ["klidna"],
     tank: "main", x, y, speed: 36 + (ageDays % 3), dir, size: 1.08 + (ageDays % 4) * 0.025,
-    color, tail: "short", pattern, specialSprite: "glassArrow", phase: ageDays * 0.37,
+    color, body: "slender", tail: "short", dorsalFin: "normal", ventralFin: "normal",
+    pattern, specialSprite: null, phase: ageDays * 0.37,
+    });
+  }
+}
+
+export function updateStarterSchoolVisuals(items = fish) {
+  for (const [id, , , , , color, pattern] of starterSchool) {
+    const existing = items.find((item) => item.id === id);
+    if (!existing) continue;
+    Object.assign(existing, {
+      body: "slender", tail: "short", dorsalFin: "normal", ventralFin: "normal",
+      color, pattern, specialSprite: null,
+    });
+  }
+}
+
+export function ensureAnatomyV6TestFish(items = fish) {
+  const variants = [
+    ["anatomy-v6-1", "Skvrnka", 390, 205, "ruby", "torpedo", "lyre", "low", "sickle", "blotches"],
+    ["anatomy-v6-2", "Hrbolka", 570, 295, "turquoise", "humpback", "double", "crown", "whisker", "stripe"],
+    ["anatomy-v6-3", "Kapicka", 750, 385, "gold", "teardrop", "paddle", "rounded", "fan", "spots"],
+    ["pattern-v1-bands", "Pasenka", 220, 155, "violet", "round", "fork", "sail", "paired", "bands", 1.5],
+    ["pattern-v1-koi", "Koi", 360, 335, "coral", "stocky", "broad", "normal", "normal", "koi", 1.5],
+    ["pattern-v1-net", "Sitka", 510, 145, "emerald", "deep", "short", "rounded", "fan", "reticulated", 1.5],
+    ["pattern-v1-zones", "Pulnoc", 650, 235, "cobalt", "slender", "veil", "low", "sickle", "zoned", 1.5],
+    ["pattern-v1-maze", "Klikatka", 800, 145, "magenta", "diamond", "double", "crown", "whisker", "maze", 1.5],
+    ["pattern-v1-eye", "Okata", 900, 325, "amber", "teardrop", "lyre", "rounded", "fan", "eyespot", 1.5],
+  ];
+  for (const [id, name, x, y, color, body, tail, dorsalFin, ventralFin, pattern, size = 2] of variants) {
+    if (items.some((item) => item.id === id)) continue;
+    items.push({
+      id, name, species: "Pokusny modularni krizenec", category: "hybrid", rarity: "Uncommon",
+      age: "28 dni", ageDays: 28, health: 96, stress: 4, hunger: 20,
+      healthNote: "Zdrava testovaci ryba s novou anatomii.", symptoms: [], diseases: [],
+      history: ["Pridana pro kontrolu novych skladanych znaku."], traits: ["zvedava"],
+      parents: [], offspring: [], sex: x % 2 ? "samec" : "samice", tank: "main",
+      x, y, speed: 27 + (x % 5), dir: x % 3 ? 1 : -1, size, color,
+      body, tail, dorsalFin, ventralFin, pattern, specialSprite: null, phase: x * 0.013,
     });
   }
 }

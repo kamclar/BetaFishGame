@@ -3,6 +3,7 @@ import { gameMinutesPerRealSecond, simulationSeconds } from "./timeSystem.js";
 import { daylightAt } from "./behaviorSystem.js";
 import { waterConfig } from "../config/waterConfig.js";
 import { fishEnvironmentConfig, hungerConfig } from "../config/fishConfig.js";
+import { plantConfig, plantGrowthPerGameDay } from "../config/plantConfig.js";
 
 export const gameClock = {
   day: 1,
@@ -30,23 +31,42 @@ export function updateWorld(delta, tanks, plants, fish, onNewDay) {
     ensureWaterChemistry(tank);
     const residentFish = fish.filter((item) => item.tank === tankId);
     const residents = residentFish.length;
+    ensureSnailResidents(tank);
+    for (const snail of tank.snailResidents) snail.ageDays = (snail.ageDays ?? 0) + simDelta / 86400;
+    const snailBiomass = tank.snailResidents.reduce((sum, snail) => sum + snailGrowthScale(snail), 0);
     tank.lightLevel = daylightAt(gameClock.minute);
     tank.capacity ??= defaultCapacity(tankId);
-    tank.bioload = residentFish.reduce((sum, item) => sum + (item.size ?? 1.5) * (item.growthScale ?? 1) * waterConfig.bioload.fishSizeFactor, 0) + (tank.snails ?? 0) * waterConfig.bioload.snail;
+    tank.bioload = residentFish.reduce((sum, item) => sum + (item.size ?? 1.5) * (item.growthScale ?? 1) * waterConfig.bioload.fishSizeFactor, 0) + snailBiomass * waterConfig.bioload.snail;
     tank.loadRatio = tank.bioload / tank.capacity;
     const plantList = plants[tankId] ?? [];
     const plantSupport = plantList.reduce((sum, plant) => {
       const type = plantTypes[plant.type];
-      plant.age = (plant.age ?? 0) + simDelta * waterConfig.plants.ageRate;
-      plant.growthStage ??= Math.min(1, 0.16 + plant.age * 0.012);
+      plant.ageDays = (plant.ageDays ?? 0) + simDelta / 86400;
+      plant.age = plant.ageDays;
+      plant.growthStage ??= plantConfig.growth.initialStageMax;
+      plant.growthOriginStage ??= plant.growthStage;
       plant.condition ??= type?.hardiness ?? 0.7;
       const waterGrowth = Math.max(0.12, Math.min(1.08, (tank.waterQuality - 0.25) / 0.65));
       const availableLight = Math.max(0.04, tank.lightLevel * (tank.lightStrength ?? 1));
-      const lightFitness = Math.max(waterConfig.plants.minimumLightFitness, 1 - Math.abs(availableLight - (type?.lightNeed ?? 0.5)) * 1.25);
+      const lightFitness = Math.max(plantConfig.minimumLightFitness, 1 - Math.abs(availableLight - (type?.lightNeed ?? 0.5)) * 1.25);
       const conditionGrowth = 0.35 + plant.condition * 0.65;
-      plant.growthStage = Math.min(1, plant.growthStage + simDelta * (type?.growth ?? 0.4) * waterGrowth * lightFitness * conditionGrowth * waterConfig.plants.growthRate);
+      const rawEnvironment = waterGrowth * lightFitness * conditionGrowth;
+      const environmentSpeed = Math.min(1.1, plantConfig.growth.minimumEnvironmentSpeed + rawEnvironment * plantConfig.growth.environmentInfluence);
+      const growthPerDay = plantGrowthPerGameDay(plant.type, plant.growthStage, plant.growthOriginStage);
+      plant.growthStage = Math.min(1, plant.growthStage + simDelta / 86400 * growthPerDay * environmentSpeed);
       const conditionTarget = Math.max(0.18, Math.min(1, tank.waterQuality * 0.72 + lightFitness * 0.2 + (type?.hardiness ?? 0.7) * 0.12));
-      plant.condition += (conditionTarget - plant.condition) * Math.min(1, simDelta * waterConfig.plants.conditionRate);
+      plant.condition += (conditionTarget - plant.condition) * Math.min(1, simDelta * plantConfig.conditionRate);
+      if (type?.shape === "floating") {
+        const interval = plantConfig.flowering.intervalDays;
+        const phaseDays = ((plant.flowerPhase ?? 0) / (Math.PI * 2)) * interval;
+        const cycleDay = ((plant.ageDays + phaseDays) % interval + interval) % interval;
+        plant.bloomHealthy = plant.bloomHealthy
+          ? plant.condition >= plantConfig.flowering.condition - 0.1
+          : plant.condition >= plantConfig.flowering.condition;
+        plant.flowering = plant.growthStage >= plantConfig.flowering.stage
+          && plant.bloomHealthy
+          && cycleDay < plantConfig.flowering.durationDays;
+      }
       const sizeSupport = 0.3 + plant.growthStage * 0.7;
       return sum + (type?.waterBonus ?? 0) * sizeSupport * (0.65 + plant.condition * 0.35);
     }, 0);
@@ -56,21 +76,26 @@ export function updateWorld(delta, tanks, plants, fish, onNewDay) {
     tank.debris = Math.min(1, (tank.debris ?? waterConfig.dirt.initialDebris) + simDelta * residents * waterConfig.dirt.debrisPerFishSecond * filterFactor);
     tank.brownWater = Math.min(1, (tank.brownWater ?? waterConfig.dirt.initialBrownWater) + simDelta * (tank.debris * waterConfig.dirt.brownFromDebris + tank.waste * waterConfig.dirt.brownFromWaste) * filterFactor);
     tank.algae = Math.min(1, (tank.algae ?? waterConfig.dirt.initialAlgae) + simDelta * (waterConfig.dirt.algaeBase + tank.waterQuality * waterConfig.dirt.algaeFromWater));
-    tank.algae = Math.max(0, tank.algae - simDelta * (tank.snails ?? 0) * waterConfig.dirt.snailCleaning);
+    tank.algae = Math.max(0, tank.algae - simDelta * snailBiomass * waterConfig.dirt.snailCleaning);
     tank.dirtTick = (tank.dirtTick ?? 0) + simDelta;
     const growthSteps = Math.floor(tank.dirtTick / waterConfig.dirt.mapStepSeconds);
     if (growthSteps > 0) {
       tank.dirtTick %= waterConfig.dirt.mapStepSeconds;
       for (let step = 0; step < growthSteps; step += 1) {
-        const algaeIndex = Math.floor(Math.random() * tank.algaeMap.length);
-        tank.algaeMap[algaeIndex] = Math.min(1, tank.algaeMap[algaeIndex] + waterConfig.dirt.algaeMapGrowth);
+        for (let sample = 0; sample < waterConfig.dirt.algaeGrowthSamplesPerStep; sample += 1) {
+          const algaeIndex = Math.floor(Math.random() * tank.algaeMap.length);
+          tank.algaeMap[algaeIndex] = Math.min(1, tank.algaeMap[algaeIndex] + waterConfig.dirt.algaeMapGrowth);
+        }
         const debrisIndex = Math.floor(Math.random() * tank.debrisMap.length);
         tank.debrisMap[debrisIndex] = Math.min(1, tank.debrisMap[debrisIndex] + waterConfig.dirt.debrisMapGrowth * Math.max(1, residents / 3) * filterFactor);
       }
     }
-    for (let snail = 0; snail < (tank.snails ?? 0); snail += 1) {
+    for (let snail = 0; snail < tank.snailResidents.length; snail += 1) {
       const position = snailPosition(snail, Date.now());
-      cleanAlgaeAt(tank, position.x, position.y, delta * 0.012, 0.038, 0.055);
+      const snailScale = snailGrowthScale(tank.snailResidents[snail]);
+      cleanAlgaeAt(tank, position.x, position.y, delta * 0.012 * snailScale, 0.038, 0.055);
+      const debrisIndex = Math.max(0, Math.min(tank.debrisMap.length - 1, Math.floor(position.x * tank.debrisMap.length)));
+      tank.debrisMap[debrisIndex] = Math.min(1, tank.debrisMap[debrisIndex] + simDelta * waterConfig.dirt.snailDebrisPerSecond * snailScale);
     }
     tank.algae = average(tank.algaeMap);
     tank.debris = average(tank.debrisMap);
@@ -235,14 +260,63 @@ function defaultCapacity(tankId) {
   return waterConfig.capacities[tankId] ?? waterConfig.capacities.fallback;
 }
 
-export function scrapeAlgae(tank, xNormalized = 0.5, yNormalized = 0.5, strength = 0.11, width = 0.055) {
+export function scrapeAlgae(
+  tank,
+  xNormalized = 0.5,
+  yNormalized = 0.5,
+  strength = 0.11,
+  width = 0.055,
+  trailLength = 0.12,
+  directionX = 0,
+  directionY = 1,
+  completePass = false,
+) {
   ensureDirtMaps(tank);
-  cleanAlgaeAt(tank, xNormalized, yNormalized, strength, width, 0.12);
+  cleanAlgaeBehindScraper(
+    tank, xNormalized, yNormalized, strength, width, trailLength,
+    directionX, directionY, completePass,
+  );
   tank.algae = average(tank.algaeMap);
 }
 
+function cleanAlgaeBehindScraper(
+  tank, xNormalized, yNormalized, strength, width, trailLength,
+  directionX, directionY, completePass,
+) {
+  const columns = waterConfig.dirt.algaeMapColumns;
+  const rows = waterConfig.dirt.algaeMapRows;
+  const directionLength = Math.hypot(directionX, directionY);
+  if (directionLength < 0.0001) return;
+  const forwardX = directionX / directionLength;
+  const forwardY = directionY / directionLength;
+  const sideX = -forwardY;
+  const sideY = forwardX;
+
+  tank.algaeMap.forEach((value, index) => {
+    const x = (index % columns + 0.5) / columns;
+    const y = (Math.floor(index / columns) + 0.5) / rows;
+    const offsetX = x - xNormalized;
+    const offsetY = y - yNormalized;
+    const behind = -(offsetX * forwardX + offsetY * forwardY);
+    const sideways = Math.abs(offsetX * sideX + offsetY * sideY);
+    if (behind < 0 || behind > trailLength || sideways > width) return;
+
+    if (completePass) {
+      tank.algaeMap[index] = 0;
+      return;
+    }
+    const sideInfluence = Math.max(0, 1 - sideways / width);
+    const tailFadeStart = trailLength * 0.82;
+    const tailInfluence = behind <= tailFadeStart
+      ? 1
+      : Math.max(0, (trailLength - behind) / Math.max(0.0001, trailLength - tailFadeStart));
+    tank.algaeMap[index] = Math.max(0, value - strength * sideInfluence * tailInfluence);
+  });
+}
+
 function cleanAlgaeAt(tank, xNormalized, yNormalized, strength, width, height) {
-  const columns = 32, rows = 18;
+  const columns = waterConfig.dirt.algaeMapColumns;
+  const rows = waterConfig.dirt.algaeMapRows;
   tank.algaeMap.forEach((value, index) => {
     const x = (index % columns + 0.5) / columns;
     const y = (Math.floor(index / columns) + 0.5) / rows;
@@ -260,15 +334,67 @@ export function snailPosition(index, timeMs) {
   };
 }
 
+export function snailGrowthScale(snail) {
+  const progress = Math.max(0, Math.min(1, (snail?.ageDays ?? 0) / waterConfig.snails.growthDays));
+  const eased = progress * progress * (3 - 2 * progress);
+  return waterConfig.snails.juvenileScale + (waterConfig.snails.adultScale - waterConfig.snails.juvenileScale) * eased;
+}
+
+export function ensureSnailResidents(tank) {
+  tank.snailResidents ??= [];
+  const legacyCount = Math.max(0, tank.snails ?? 0);
+  while (tank.snailResidents.length < legacyCount) {
+    const index = tank.snailResidents.length;
+    tank.snailResidents.push({
+      id: `ampullaria-${index}-${Math.round((tank.snailSeed ?? 1) * 1000)}`,
+      ageDays: waterConfig.snails.growthDays * waterConfig.snails.migratedAgeFraction,
+      antennaPhase: index * 2.37 + 0.8,
+    });
+  }
+  tank.snails = tank.snailResidents.length;
+  return tank.snailResidents;
+}
+
+export function addTankSnail(tank) {
+  ensureSnailResidents(tank);
+  const index = tank.snailResidents.length;
+  tank.snailResidents.push({ id: `ampullaria-${Date.now()}-${index}`, ageDays: 0, antennaPhase: Math.random() * Math.PI * 2 });
+  tank.snails = tank.snailResidents.length;
+  return tank.snailResidents.at(-1);
+}
+
 function ensureDirtMaps(tank) {
-  if (!Array.isArray(tank.algaeMap) || tank.algaeMap.length !== 32 * 18) {
+  const columns = waterConfig.dirt.algaeMapColumns;
+  const rows = waterConfig.dirt.algaeMapRows;
+  const targetLength = columns * rows;
+  if (Array.isArray(tank.algaeMap) && tank.algaeMap.length === 32 * 18 && targetLength !== tank.algaeMap.length) {
+    tank.algaeMap = resizeAlgaeMap(tank.algaeMap, 32, 18, columns, rows);
+  } else if (!Array.isArray(tank.algaeMap) || tank.algaeMap.length !== targetLength) {
     const level = tank.algae ?? 0.06;
-    tank.algaeMap = Array.from({ length: 32 * 18 }, (_, i) => Math.max(0, Math.min(1, level * (0.72 + ((i * 37) % 29) / 50))));
+    tank.algaeMap = Array.from({ length: targetLength }, (_, i) => Math.max(0, Math.min(1, level * (0.72 + ((i * 37) % 29) / 50))));
   }
   if (!Array.isArray(tank.debrisMap) || tank.debrisMap.length !== 40) {
     const level = tank.debris ?? 0.08;
     tank.debrisMap = Array.from({ length: 40 }, (_, i) => Math.max(0, Math.min(1, level * (0.75 + ((i * 17) % 23) / 38))));
   }
+}
+
+function resizeAlgaeMap(source, sourceColumns, sourceRows, targetColumns, targetRows) {
+  return Array.from({ length: targetColumns * targetRows }, (_, index) => {
+    const targetX = index % targetColumns;
+    const targetY = Math.floor(index / targetColumns);
+    const sourceX = targetX / Math.max(1, targetColumns - 1) * (sourceColumns - 1);
+    const sourceY = targetY / Math.max(1, targetRows - 1) * (sourceRows - 1);
+    const x0 = Math.floor(sourceX);
+    const y0 = Math.floor(sourceY);
+    const x1 = Math.min(sourceColumns - 1, x0 + 1);
+    const y1 = Math.min(sourceRows - 1, y0 + 1);
+    const tx = sourceX - x0;
+    const ty = sourceY - y0;
+    const top = source[y0 * sourceColumns + x0] * (1 - tx) + source[y0 * sourceColumns + x1] * tx;
+    const bottom = source[y1 * sourceColumns + x0] * (1 - tx) + source[y1 * sourceColumns + x1] * tx;
+    return top * (1 - ty) + bottom * ty;
+  });
 }
 
 function average(values) {

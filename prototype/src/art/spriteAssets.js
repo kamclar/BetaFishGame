@@ -4,6 +4,8 @@ import { attachmentOffset, bodyAnatomy, dorsalFinAnatomy, tailAnatomy, ventralFi
 const cache = new Map();
 const tintedCache = new Map();
 const clippedPatternCache = new Map();
+const proceduralPatternCache = new Map();
+const patternAccents = ["#f2c14e", "#f27f52", "#ede2c2", "#83d9d2", "#8e78d6", "#dce8f2"];
 
 export function loadFishSpriteAssets() {
   const files = collectFishSpriteFiles();
@@ -48,15 +50,24 @@ export function drawFishSprites(ctx, item, options) {
   const ventralFin = ventralFinAnatomy[item.ventralFin ?? finsKey] ?? ventralFinAnatomy.normal;
   const advancedEldritch = (item.eldritchStage ?? 0) >= 4;
   const colors = options.palette[item.color];
-  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tail.scale * body.partScales.tail * (advancedEldritch ? 1.28 : 1), colors)) return false;
+  const tailScale = tail.scale * body.partScales.tail * (advancedEldritch ? 1.28 : 1);
+  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tailScale, colors)) return false;
+  if (item.pattern === "eyespot"
+    && !drawTailEyespot(ctx, tail.file, frame, body.anchors.tail, tail.socket, tailScale, item, colors)) return false;
   // Attachment roots belong behind the body. Drawing the body last hides the
   // hard socket edges and makes the independently animated parts read as one fish.
   if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, body.anchors.dorsal, dorsalFin.socket, dorsalFin.scale * body.partScales.dorsal * (advancedEldritch ? 1.18 : 1), colors)) return false;
   if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, body.anchors.ventral, ventralFin.socket, ventralFin.scale * body.partScales.ventral * (advancedEldritch ? 1.75 : 1), colors)) return false;
   if (!drawAttachedPart(ctx, body.file, "base", 0, [0, 0], [0, 0], body.scale, colors)) return false;
 
+  if (item.pattern && item.pattern !== "plain") {
+    const pattern = getProceduralPattern(body.file, item, colors);
+    if (!pattern) return false;
+    ctx.drawImage(pattern, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
+      -spriteConfig.frameWidth / 2, -spriteConfig.frameHeight / 2, spriteConfig.frameWidth, spriteConfig.frameHeight);
+  }
+
   const overlays = [
-    { file: fishSpriteParts.pattern[item.pattern], frame: 0 },
     ...activeSymptoms.map((symptomId) => ({ file: fishSpriteParts.symptoms[symptomId], frame })),
   ].filter((layer) => layer.file);
   for (const layer of overlays) {
@@ -67,6 +78,236 @@ export function drawFishSprites(ctx, item, options) {
   }
 
   return true;
+}
+
+function getProceduralPattern(bodyFile, item, colors) {
+  const body = cache.get(bodyFile);
+  if (!body || !body.complete || body.naturalWidth === 0) return null;
+  const type = item.pattern ?? "plain";
+  const seed = `${item.id ?? item.name ?? "fish"}:${item.genotype?.pattern?.join("|") ?? type}`;
+  const key = `${bodyFile}:${type}:${seed}:${colors.join("|")}`;
+  if (proceduralPatternCache.has(key)) return proceduralPatternCache.get(key);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = spriteConfig.frameWidth;
+  canvas.height = spriteConfig.frameHeight;
+  const patternCtx = canvas.getContext("2d");
+  const pixels = patternCtx.createImageData(canvas.width, canvas.height);
+  const dark = hexToRgb(colors[1]);
+  const light = hexToRgb(colors[2]);
+  const seedNumber = hashString(seed);
+  const accent = hexToRgb(patternAccents[seedNumber % patternAccents.length]);
+  const spots = createPatternSpots(seedNumber);
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      // The face remains readable even on fish with very dense markings.
+      if (x < 11 || x > 70 + Math.round(hashNoise(y, 3, seedNumber) * 3)) continue;
+      const broad = valueNoise(x / 18, y / 15, seedNumber);
+      const detail = valueNoise(x / 8, y / 7, seedNumber + 7919);
+      const noise = broad * 0.78 + detail * 0.22;
+      const sample = proceduralPatternSample(type, x, y, noise, seedNumber, spots, dark, light, accent);
+      if (!sample) continue;
+      const offset = (y * canvas.width + x) * 4;
+      pixels.data[offset] = sample.color.r;
+      pixels.data[offset + 1] = sample.color.g;
+      pixels.data[offset + 2] = sample.color.b;
+      pixels.data[offset + 3] = sample.alpha;
+    }
+  }
+  patternCtx.putImageData(pixels, 0, 0);
+  patternCtx.globalCompositeOperation = "destination-in";
+  patternCtx.drawImage(body, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight);
+  patternCtx.globalCompositeOperation = "source-over";
+  proceduralPatternCache.set(key, canvas);
+  return canvas;
+}
+
+function proceduralPatternSample(type, x, y, noise, seed, spots, dark, light, accent) {
+  if (type === "spots") {
+    const spot = spots.find((candidate) => {
+      const dx = (x - candidate.x) / candidate.rx;
+      const dy = (y - candidate.y) / candidate.ry;
+      const edgeNoise = hashNoise(x + candidate.index * 7, y, seed) * 0.28;
+      return dx * dx + dy * dy <= 0.86 + edgeNoise;
+    });
+    if (!spot) return null;
+    const normalizedY = (y - spot.y) / spot.ry;
+    const color = normalizedY > 0.18 ? dark : (spot.light ? light : accent);
+    return { color, alpha: normalizedY > 0.18 ? 225 : 210 };
+  }
+  if (type === "stripe") {
+    const spacing = 9 + seed % 4;
+    const slope = ((seed >>> 5) % 7) - 3;
+    const warp = (valueNoise(x / 13, y / 9, seed + 313) - 0.5) * 8
+      + Math.sin(y * 0.22 + seed * 0.01) * 2.3;
+    const phase = positiveModulo(x + y * slope * 0.14 + warp + seed % spacing, spacing);
+    const width = 1.15 + noise * 1.65;
+    const faded = valueNoise(x / 7, y / 6, seed + 1877) < 0.2;
+    return phase < width && !faded ? { color: dark, alpha: 195 + Math.round(noise * 30) } : null;
+  }
+  if (type === "bands") {
+    const spacing = 15 + seed % 5;
+    const irregularX = x + (noise - 0.5) * 7 + Math.sin(y * 0.24 + seed) * 1.8;
+    const phase = positiveModulo(irregularX + seed % spacing, spacing);
+    return phase < 6 ? { color: phase < 1.3 ? light : accent, alpha: phase < 1.3 ? 180 : 220 } : null;
+  }
+  if (type === "blotches" || type === "koi") {
+    if (noise > 0.57) return { color: type === "koi" ? accent : dark, alpha: Math.min(225, 105 + Math.round((noise - 0.57) * 760)) };
+    if (type === "koi" && noise < 0.29) return { color: light, alpha: 185 };
+    return null;
+  }
+  if (type === "reticulated") {
+    return isScaleArc(x, y, seed) ? { color: dark, alpha: 145 } : null;
+  }
+  if (type === "zoned") {
+    const frontBoundary = 54 + Math.sin(y * 0.31 + seed) * 3;
+    const rearBoundary = 27 + Math.sin(y * 0.27 + seed * 0.01) * 4;
+    if (x > frontBoundary) return { color: light, alpha: 195 };
+    if (x < rearBoundary) return { color: accent, alpha: 215 };
+    return null;
+  }
+  if (type === "maze") {
+    const field = Math.sin(x * 0.29 + Math.sin(y * 0.21) * 2.2 + seed)
+      + Math.sin(y * 0.34 + Math.sin(x * 0.17 + seed) * 1.8);
+    return Math.abs(field) < 0.28 ? { color: light, alpha: 210 } : null;
+  }
+  if (type === "eyespot") {
+    return eyespotSample(x, y, seed, dark, light, accent);
+  }
+  if (type === "glow") {
+    const wave = Math.abs(positiveModulo(x + Math.sin(y * 0.31 + seed) * 4, 12) - 6);
+    return wave < 1.15 ? { color: light, alpha: 225 } : null;
+  }
+  return null;
+}
+
+function createPatternSpots(seed) {
+  const count = 11 + seed % 7;
+  return Array.from({ length: count }, (_, index) => ({
+    index,
+    x: 14 + hashNoise(index, 11, seed) * 39,
+    y: 16 + hashNoise(index, 23, seed) * 32,
+    rx: 1.35 + hashNoise(index, 37, seed) * 1.45,
+    ry: 1.15 + hashNoise(index, 41, seed) * 1.25,
+    light: hashNoise(index, 53, seed) > 0.62,
+  }));
+}
+
+function eyespotGeometry(seed) {
+  return { x: 17 + seed % 5, y: 29 + (seed >>> 4) % 7, inner: 3.2, middle: 7.1, outer: 11.2 };
+}
+
+function eyespotSample(x, y, seed, dark, light, accent) {
+  const eye = eyespotGeometry(seed);
+  const distance = Math.hypot(x - eye.x, y - eye.y);
+  if (distance < eye.inner) return { color: dark, alpha: 245 };
+  if (distance < eye.middle) return { color: light, alpha: 235 };
+  if (distance < eye.outer) return { color: accent, alpha: 220 };
+  return null;
+}
+
+function drawTailEyespot(ctx, file, frame, anchor, socket, scale, item, colors) {
+  const image = getTailEyespotLayer(file, frame, anchor, socket, scale, item, colors);
+  if (!image) return false;
+  const offset = attachmentOffset(anchor, socket, scale);
+  ctx.drawImage(image, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
+    -spriteConfig.frameWidth / 2 + offset.x,
+    -spriteConfig.frameHeight / 2 + offset.y,
+    spriteConfig.frameWidth * scale,
+    spriteConfig.frameHeight * scale);
+  return true;
+}
+
+function getTailEyespotLayer(file, frame, anchor, socket, scale, item, colors) {
+  const tail = cache.get(file);
+  if (!tail || !tail.complete || tail.naturalWidth === 0) return null;
+  const seedText = `${item.id ?? item.name ?? "fish"}:${item.genotype?.pattern?.join("|") ?? "eyespot"}`;
+  const seed = hashString(seedText);
+  const key = `tail-eye:${file}:${frame}:${anchor.join(",")}:${scale.toFixed(3)}:${seed}:${colors.join("|")}`;
+  if (proceduralPatternCache.has(key)) return proceduralPatternCache.get(key);
+  const canvas = document.createElement("canvas");
+  canvas.width = spriteConfig.frameWidth;
+  canvas.height = spriteConfig.frameHeight;
+  const layerCtx = canvas.getContext("2d");
+  const pixels = layerCtx.createImageData(canvas.width, canvas.height);
+  const dark = hexToRgb(colors[1]);
+  const light = hexToRgb(colors[2]);
+  const accent = hexToRgb(patternAccents[seed % patternAccents.length]);
+  const offset = attachmentOffset(anchor, socket, scale);
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const sample = eyespotSample(offset.x + x * scale, offset.y + y * scale, seed, dark, light, accent);
+      if (!sample) continue;
+      const pixel = (y * canvas.width + x) * 4;
+      pixels.data[pixel] = sample.color.r;
+      pixels.data[pixel + 1] = sample.color.g;
+      pixels.data[pixel + 2] = sample.color.b;
+      pixels.data[pixel + 3] = sample.alpha;
+    }
+  }
+  layerCtx.putImageData(pixels, 0, 0);
+  layerCtx.globalCompositeOperation = "destination-in";
+  layerCtx.drawImage(tail, frame * spriteConfig.frameWidth, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
+    0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight);
+  layerCtx.globalCompositeOperation = "source-over";
+  proceduralPatternCache.set(key, canvas);
+  return canvas;
+}
+
+function isScaleArc(x, y, seed) {
+  const spacingX = 6.4;
+  const spacingY = 5.1;
+  const approximateRow = Math.round((y - 13) / spacingY);
+  for (let row = approximateRow - 1; row <= approximateRow + 1; row += 1) {
+    const rowJitter = (hashNoise(row, 71, seed) - 0.5) * 1.25;
+    const centerY = 13 + row * spacingY + rowJitter;
+    const stagger = positiveModulo(row, 2) * spacingX * 0.5;
+    const approximateColumn = Math.round((x - 14 - stagger) / spacingX);
+    for (let column = approximateColumn - 1; column <= approximateColumn + 1; column += 1) {
+      const jitterX = (hashNoise(column, row, seed + 991) - 0.5) * 1.4;
+      const jitterY = (hashNoise(column, row, seed + 1871) - 0.5) * 0.8;
+      const centerX = 14 + stagger + column * spacingX + jitterX;
+      const dx = (x - centerX) / (3.25 + hashNoise(column, row, seed + 43) * 0.55);
+      const dy = (y - centerY - jitterY) / (2.65 + hashNoise(column, row, seed + 79) * 0.5);
+      const radius = Math.hypot(dx, dy);
+      if (dy > -0.72 && Math.abs(radius - 1) < 0.16) return true;
+    }
+  }
+  return false;
+}
+
+function positiveModulo(value, divisor) {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function valueNoise(x, y, seed) {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const tx = smoothStep(x - x0);
+  const ty = smoothStep(y - y0);
+  const top = mixValue(hashNoise(x0, y0, seed), hashNoise(x0 + 1, y0, seed), tx);
+  const bottom = mixValue(hashNoise(x0, y0 + 1, seed), hashNoise(x0 + 1, y0 + 1, seed), tx);
+  return mixValue(top, bottom, ty);
+}
+
+function hashNoise(x, y, seed) {
+  let value = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + seed) | 0;
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
+}
+
+function hashString(text) {
+  let hash = 2166136261;
+  for (const char of text) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}
+
+function smoothStep(value) {
+  return value * value * (3 - 2 * value);
+}
+
+function mixValue(a, b, amount) {
+  return a + (b - a) * amount;
 }
 
 function drawAttachedPart(ctx, file, tint, frame, anchor, socket, scale, colors) {

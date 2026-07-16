@@ -3,7 +3,11 @@ import { contractConfig } from "../config/economyConfig.js";
 
 const colors = { blue: "modrou", amber: "medovou", violet: "fialovou", pale: "světlou", black: "černou" };
 const tails = { short: "krátkými ploutvemi", fork: "vidlicovým ocasem", veil: "závojovým ocasem" };
-const patterns = { plain: "bez kresby", spots: "se skvrnami", stripe: "s pruhy", glow: "se světelným vzorem" };
+const patterns = {
+  plain: "bez kresby", spots: "s tečkami", blotches: "s velkými skvrnami", stripe: "s úzkými pruhy",
+  bands: "se širokými pásy", koi: "s koi kresbou", reticulated: "se síťováním", zoned: "s barevnými zónami",
+  maze: "s labyrintovou kresbou", eyespot: "s falešným okem", glow: "se světelným vzorem",
+};
 
 export function ensureContract(economy) {
   if (economy.contract) return economy.contract;

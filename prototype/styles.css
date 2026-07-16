@@ -364,7 +364,7 @@ body:hover .desktop-tank-mode .drag-handle {
   color: #7a5030;
 }
 
-.fish-card-tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 10px 8px; border: 2px solid #29444b; }
+.fish-card-tabs { display: grid; grid-template-columns: repeat(2, 1fr); margin: 0 10px 8px; border: 2px solid #29444b; }
 .fish-card-tabs button { padding: 6px 3px; border: 0; border-right: 1px solid #29444b; background: #0a171b; color: #789793; font: 800 10px Consolas, monospace; cursor: pointer; }
 .fish-card-tabs button:last-child { border-right: 0; }
 .fish-card-tabs button.active { background: #315158; color: #fff0bd; }
@@ -390,6 +390,46 @@ body:hover .desktop-tank-mode .drag-handle {
 .atlas-entries { display: flex; flex-wrap: wrap; gap: 4px; }
 .atlas-entries span { padding: 3px 5px; border: 1px solid #42635e; color: #dce9df; font: 9px Consolas, monospace; }
 .atlas-entries span.unknown { border-color: #28383b; color: #4e6260; background: #101b1e; }
+
+.atlas-icon { display: grid; place-items: center; width: 42px; height: 42px; border: 3px solid #70522e; background: #c5aa68; color: #2b1d0d; font: 900 21px Georgia, serif; box-shadow: inset 5px 0 0 #8d6d3d, inset -3px 0 #ead897; }
+#atlasCount { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
+
+.atlas-panel {
+  position: fixed;
+  z-index: 22;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  width: min(720px, calc(100vw - 40px));
+  max-height: calc(100vh - 90px);
+  padding: 0 0 14px;
+  outline: 4px solid #071014;
+  background: #102126;
+  box-shadow: inset 0 0 0 3px #38535a, 8px 8px 0 rgba(0,0,0,.65);
+}
+.desktop-tank-mode.show-atlas .atlas-panel { display: block; }
+.atlas-panel > .eyebrow { margin: 0; padding: 12px 44px 4px 14px; background: repeating-linear-gradient(90deg, #203b42 0 12px, #25464d 12px 24px); color: #9ad8ca; font: 900 10px Consolas, monospace; }
+.atlas-panel > h2 { margin: 0; padding: 2px 14px 10px; border-bottom: 3px solid #4c6a70; background: repeating-linear-gradient(90deg, #203b42 0 12px, #25464d 12px 24px); color: #f0ddb0; font: 700 21px Georgia, serif; }
+.atlas-intro { margin: 10px 14px 7px; color: #91aaa5; font: 10px/1.45 Consolas, monospace; }
+.atlas-panel .atlas-page { margin: 0 14px; max-height: calc(100vh - 230px); padding: 10px; }
+.atlas-summary { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; padding: 8px 10px; border: 2px solid #5d5638; background: #24271e; color: #9eb1a9; font: 10px Consolas, monospace; }
+.atlas-summary strong { color: #e1c989; font: 900 18px Georgia, serif; }
+.atlas-panel .atlas-entries { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 6px; }
+.atlas-panel .atlas-entries span { display: grid; gap: 3px; min-height: 44px; padding: 7px; border: 2px solid #42635e; background: #172a2d; }
+.atlas-panel .atlas-entries b { color: #dce9df; font: 900 10px Consolas, monospace; }
+.atlas-panel .atlas-entries small { color: #78958f; font: 8px Consolas, monospace; }
+.atlas-panel .atlas-entries span.unknown { place-items: center; border-color: #28383b; color: #4e6260; background: #101b1e; }
+.atlas-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 0 14px 8px; }
+.atlas-tabs button { padding: 7px; border: 2px solid #36565b; background: #102126; color: #91aaa5; font: 900 10px Consolas, monospace; cursor: pointer; }
+.atlas-tabs button.active { border-color: #d4b45f; background: #273637; color: #f0ddb0; }
+.atlas-fish-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.atlas-fish-entry { min-width: 0; padding: 7px; border: 2px solid #42635e; background: #14282c; }
+.atlas-fish-entry canvas { display: block; width: 100%; height: 82px; border-bottom: 1px solid #355257; background: radial-gradient(ellipse at center, #31575b 0, #14282c 70%); image-rendering: pixelated; }
+.atlas-fish-entry h3 { margin: 6px 0 2px !important; color: #f0ddb0 !important; }
+.atlas-fish-entry p { margin: 0 0 5px; color: #8fb2aa; font: 9px Consolas, monospace; }
+.atlas-fish-entry small { display: block; color: #78958f; font: 8px/1.45 Consolas, monospace; }
+.atlas-empty { color: #78958f; font: 10px Consolas, monospace; }
 
 .desktop-tank-mode .fish-data {
   grid-template-columns: 1fr;
@@ -1421,21 +1461,24 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
 }
 .held-cursor.clean { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; overflow: visible; transform-origin: 0 0; }
 .held-cursor.clean::before {
-  z-index: 1; left: -13px; top: auto; bottom: 7px; width: 26px; height: var(--siphon-fill, 0px); max-height: 47px; border: 0; border-radius: 5px 5px 9px 9px;
+  z-index: 3; left: -31px; top: -76px; width: 62px; height: 78px; border: 0; border-radius: 0;
   background:
-    radial-gradient(circle at 20% 75%, #c69a5d 0 2px, transparent 3px),
-    radial-gradient(circle at 72% 42%, #7b542f 0 2px, transparent 3px),
-    radial-gradient(circle at 46% 18%, #b17b42 0 1px, transparent 2px),
-    linear-gradient(to top, rgba(91,57,29,.94), rgba(139,96,52,.8) 55%, rgba(104,78,51,.42));
-  opacity: calc(.35 + var(--siphon-turbidity, 0));
+    radial-gradient(circle at 20% 75%, #a56f3e 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 42%, #58351d 0 2px, transparent 3px),
+    radial-gradient(circle at 46% 18%, #80502b 0 1px, transparent 2px),
+    linear-gradient(to top, rgba(34,20,12,.98), rgba(72,43,22,.95) 55%, rgba(66,47,31,.78));
+  -webkit-mask: url("./assets/items/item_siphon_bell.png") center bottom / contain no-repeat;
+  mask: url("./assets/items/item_siphon_bell.png") center bottom / contain no-repeat;
+  clip-path: inset(calc(100% - var(--siphon-level, 0%)) 0 0 0);
+  opacity: calc(.48 + var(--siphon-turbidity, 0));
   box-shadow: inset 0 4px 0 rgba(190, 152, 103, .35);
-  transform-origin: bottom center;
-  transition: height 90ms linear, opacity 260ms ease-out;
+  transition: clip-path 90ms linear, opacity 260ms ease-out;
 }
 .held-cursor.clean::after {
-  content: ""; position: absolute; z-index: 2; left: -31px; top: -76px; width: 62px; height: 78px;
+  content: ""; position: absolute; z-index: 4; left: -31px; top: -76px; width: 62px; height: 78px;
   background: url("./assets/items/item_siphon_bell.png") center bottom / contain no-repeat;
   image-rendering: pixelated;
+  opacity: 0.68;
 }
 
 .held-cursor.clean.working::before { animation: siphon-swirl 260ms steps(2, end) infinite; }
@@ -1445,34 +1488,32 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
 }
 
 .held-cursor.refill { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; overflow: visible; }
-.held-cursor.refill::before {
-  content: "";
-  position: absolute;
-  left: -38px;
-  top: -54px;
-  width: 58px;
-  height: 45px;
-  border: 4px solid #587c82;
-  border-top-color: #9fc2c0;
-  border-radius: 5px 5px 13px 13px;
-  background:
-    linear-gradient(to top, #318ca5 0 58%, transparent 59%),
-    repeating-linear-gradient(90deg, #28484e 0 5px, #345b61 5px 10px);
-  box-shadow: inset 0 -5px 0 #173a43, 3px 4px 0 rgba(0,0,0,.45);
-  image-rendering: pixelated;
-}
+.held-cursor.refill::before { content: none; }
 .held-cursor.refill::after {
   content: "";
   position: absolute;
-  left: 8px;
-  top: -17px;
-  width: 10px;
-  height: 48px;
-  background: repeating-linear-gradient(0deg, rgba(116,213,229,.9) 0 5px, rgba(63,158,184,.8) 5px 9px);
+  left: -26px;
+  top: 0;
+  width: 52px;
+  height: var(--refill-stream, 48px);
+  background: url("./assets/items/refill_stream_body_sheet.png") 0 0 / 312px 100% no-repeat;
+  image-rendering: pixelated;
+  transform: scaleX(var(--refill-flow-scale, 1));
+  transform-origin: 50% 0;
   opacity: 0;
 }
-.held-cursor.refill.working::after { opacity: 1; animation: refill-stream 280ms steps(2, end) infinite; }
-@keyframes refill-stream { 50% { transform: translateX(2px); } }
+.held-cursor.refill.working::after {
+  opacity: 1;
+  animation: refill-stream-frames var(--refill-frame-duration, 540ms) steps(1, end) infinite;
+}
+@keyframes refill-stream-frames {
+  0%, 16.65% { background-position: 0 0; }
+  16.66%, 33.31% { background-position: -52px 0; }
+  33.32%, 49.97% { background-position: -104px 0; }
+  49.98%, 66.63% { background-position: -156px 0; }
+  66.64%, 83.29% { background-position: -208px 0; }
+  83.3%, 100% { background-position: -260px 0; }
+}
 
 #maintenanceStatus { display: block; color: #d4b45f; font: 700 9px Consolas, monospace; }
 

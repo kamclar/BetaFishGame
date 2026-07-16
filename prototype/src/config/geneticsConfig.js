@@ -1,17 +1,17 @@
 export const geneticsCatalogs = {
-  body: { label: "Tvary tela", values: { slender: "Stihle", round: "Kulate", deep: "Hluboke", eel: "Uhorovite", diamond: "Diamantove", stocky: "Podsadite" } },
-  tail: { label: "Ocasy", values: { short: "Kratky", fork: "Vidlicovy", veil: "Zavojovy", broad: "Siroky", eldritch: "Eldritch" } },
-  dorsalFin: { label: "Hrbetni ploutve", values: { normal: "Bezna", clamped: "Stazena", sail: "Plachetni", spiky: "Ostnita" } },
-  ventralFin: { label: "Brisni ploutve", values: { normal: "Bezna", clamped: "Stazena", paired: "Parova", ribbon: "Stuhova", eldritch: "Eldritch" } },
-  pattern: { label: "Kresby", values: { plain: "Bez kresby", spots: "Skvrny", stripe: "Pruhy", glow: "Zare" } },
+  body: { label: "Tvary tela", values: { slender: "Stihle", round: "Kulate", deep: "Hluboke", eel: "Uhorovite", diamond: "Diamantove", stocky: "Podsadite", torpedo: "Torpedovite", humpback: "Hrbaté", teardrop: "Kapkovite" } },
+  tail: { label: "Ocasy", values: { short: "Kratky", fork: "Vidlicovy", veil: "Zavojovy", broad: "Siroky", lyre: "Lyrovity", paddle: "Lopatkovity", double: "Dvojity", eldritch: "Eldritch" } },
+  dorsalFin: { label: "Hrbetni ploutve", values: { normal: "Bezna", clamped: "Stazena", sail: "Plachetni", spiky: "Ostnita", low: "Nizka dlouha", crown: "Korunkova", rounded: "Vejírova" } },
+  ventralFin: { label: "Brisni ploutve", values: { normal: "Bezna", clamped: "Stazena", paired: "Parova", ribbon: "Stuhova", sickle: "Srpovita", fan: "Vejírova", whisker: "Vouskovita", eldritch: "Eldritch" } },
+  pattern: { label: "Kresby", values: { plain: "Bez kresby", spots: "Tecky", blotches: "Velke skvrny", stripe: "Uzke pruhy", bands: "Siroke pasy", koi: "Koi skvrny", reticulated: "Sitovani", zoned: "Barevne zony", maze: "Labyrint", eyespot: "Falesne oko", glow: "Zare" } },
   color: { label: "Barvy", values: { blue: "Modra", amber: "Medova", violet: "Fialova", pale: "Bleda", black: "Cerna", coral: "Koralova", ruby: "Rubinova", emerald: "Smaragdova", gold: "Zlata", cobalt: "Kobaltova", magenta: "Purpurova", turquoise: "Tyrkysova", eldritch: "Hlubinna fialova" } },
 };
 export const dominanceOrder = {
-  body: ["deep", "diamond", "stocky", "round", "slender", "eel"],
-  tail: ["eldritch", "broad", "veil", "fork", "short"],
-  dorsalFin: ["spiky", "sail", "normal", "clamped"],
-  ventralFin: ["eldritch", "ribbon", "paired", "normal", "clamped"],
-  pattern: ["glow", "spots", "stripe", "plain"],
+  body: ["deep", "humpback", "diamond", "teardrop", "stocky", "round", "torpedo", "slender", "eel"],
+  tail: ["eldritch", "double", "lyre", "broad", "veil", "paddle", "fork", "short"],
+  dorsalFin: ["crown", "spiky", "sail", "rounded", "low", "normal", "clamped"],
+  ventralFin: ["eldritch", "whisker", "ribbon", "sickle", "fan", "paired", "normal", "clamped"],
+  pattern: ["glow", "eyespot", "maze", "koi", "bands", "blotches", "reticulated", "spots", "stripe", "zoned", "plain"],
   color: ["eldritch", "black", "magenta", "ruby", "violet", "cobalt", "emerald", "turquoise", "blue", "coral", "amber", "gold", "pale"],
 };
 export const hiddenAlleleChancePercent = 42;

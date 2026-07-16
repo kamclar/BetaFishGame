@@ -1,39 +1,59 @@
+import { plantConfig } from "../config/plantConfig.js";
+
 export const plantTypes = {
   vallisneria: {
     name: "Vallisnerie vlnita",
     shape: "ribbon",
     colors: ["#326c50", "#68ad67", "#9bd47b"],
-    growth: 0.82,
     hardiness: 0.78,
     lightNeed: 0.55,
     waterBonus: 0.012,
+    heightPotential: 0.96,
+    spread: 1.18,
+    variantCount: 4,
   },
   anubias: {
     name: "Anubias kamenni",
     shape: "broad",
     colors: ["#244f42", "#477d56", "#78a968"],
-    growth: 0.3,
     hardiness: 0.94,
     lightNeed: 0.25,
     waterBonus: 0.006,
+    heightPotential: 0.48,
+    spread: 1.42,
+    variantCount: 4,
   },
   redLudwigia: {
     name: "Ruducha medena",
     shape: "stem",
     colors: ["#633f46", "#a45a55", "#d88a62"],
-    growth: 0.68,
     hardiness: 0.52,
     lightNeed: 0.82,
     waterBonus: 0.009,
+    heightPotential: 0.88,
+    spread: 1.24,
+    variantCount: 4,
   },
   glowFern: {
     name: "Kapradina svetélkujici",
     shape: "fern",
     colors: ["#174c50", "#2f8b82", "#69d1b5"],
-    growth: 0.42,
     hardiness: 0.64,
     lightNeed: 0.38,
     waterBonus: 0.008,
+    heightPotential: 0.74,
+    spread: 1.32,
+    variantCount: 4,
+  },
+  floatingPlant: {
+    name: "Pistie plovouci",
+    shape: "floating",
+    colors: ["#315f35", "#75a947", "#c8dc70"],
+    hardiness: 0.7,
+    lightNeed: 0.72,
+    waterBonus: 0.014,
+    spread: 1.35,
+    variantCount: 4,
   },
 };
 
@@ -41,6 +61,8 @@ export const plantTypeOrder = Object.keys(plantTypes);
 
 export function createPlant(type, x, height, sway = 0) {
   const definition = plantTypes[type] ?? plantTypes.vallisneria;
+  const initialStage = plantConfig.growth.initialStageMin
+    + Math.random() * (plantConfig.growth.initialStageMax - plantConfig.growth.initialStageMin);
   return {
     type,
     x,
@@ -48,8 +70,13 @@ export function createPlant(type, x, height, sway = 0) {
     h: height,
     sway,
     age: 0,
-    growthStage: 0.08 + Math.random() * 0.08,
+    ageDays: 0,
+    growthStage: initialStage,
+    growthOriginStage: initialStage,
     condition: definition.hardiness,
+    flowerPhase: Math.random() * Math.PI * 2,
+    visualVariant: Math.floor(Math.random() * (definition.variantCount ?? 1)),
+    flowering: false,
   };
 }
 

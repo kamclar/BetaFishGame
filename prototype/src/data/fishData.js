@@ -335,10 +335,14 @@ export function ensureAnatomyV6TestFish(items = fish) {
     ["pattern-v1-net", "Sitka", 510, 145, "emerald", "deep", "short", "rounded", "fan", "reticulated", 1.5],
     ["pattern-v1-zones", "Pulnoc", 650, 235, "cobalt", "slender", "veil", "low", "sickle", "zoned", 1.5],
     ["pattern-v1-maze", "Klikatka", 800, 145, "magenta", "diamond", "double", "crown", "whisker", "maze", 1.5],
-    ["pattern-v1-eye", "Okata", 900, 325, "amber", "teardrop", "lyre", "rounded", "fan", "eyespot", 1.5],
+    ["pattern-v1-eye", "Okata", 900, 325, "amber", "teardrop", "broad", "rounded", "fan", "eyespot", 1.5],
   ];
   for (const [id, name, x, y, color, body, tail, dorsalFin, ventralFin, pattern, size = 2] of variants) {
-    if (items.some((item) => item.id === id)) continue;
+    const existing = items.find((item) => item.id === id);
+    if (existing) {
+      Object.assign(existing, { color, body, tail, dorsalFin, ventralFin, pattern, size, specialSprite: null });
+      continue;
+    }
     items.push({
       id, name, species: "Pokusny modularni krizenec", category: "hybrid", rarity: "Uncommon",
       age: "28 dni", ageDays: 28, health: 96, stress: 4, hunger: 20,

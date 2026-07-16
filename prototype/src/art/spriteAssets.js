@@ -5,7 +5,7 @@ const cache = new Map();
 const tintedCache = new Map();
 const clippedPatternCache = new Map();
 const proceduralPatternCache = new Map();
-const patternAccents = ["#f2c14e", "#f27f52", "#ede2c2", "#83d9d2", "#8e78d6", "#dce8f2"];
+const patternAccents = ["#f2c14e", "#f26d4f", "#42d6c5", "#7657e8", "#e64f9b", "#4f8ff2"];
 
 export function loadFishSpriteAssets() {
   const files = collectFishSpriteFiles();
@@ -182,27 +182,31 @@ function proceduralPatternSample(type, x, y, noise, seed, spots, dark, light, ac
 }
 
 function createPatternSpots(seed) {
-  const count = 11 + seed % 7;
+  const count = 8 + seed % 5;
   return Array.from({ length: count }, (_, index) => ({
     index,
-    x: 14 + hashNoise(index, 11, seed) * 39,
+    x: 12 + hashNoise(index, 11, seed) * 38,
     y: 16 + hashNoise(index, 23, seed) * 32,
-    rx: 1.35 + hashNoise(index, 37, seed) * 1.45,
-    ry: 1.15 + hashNoise(index, 41, seed) * 1.25,
+    rx: 2.2 + hashNoise(index, 37, seed) * 1.8,
+    ry: 1.8 + hashNoise(index, 41, seed) * 1.4,
     light: hashNoise(index, 53, seed) > 0.62,
   }));
 }
 
 function eyespotGeometry(seed) {
-  return { x: 17 + seed % 5, y: 29 + (seed >>> 4) % 7, inner: 3.2, middle: 7.1, outer: 11.2 };
+  return { x: 1 + seed % 5, y: 29 + (seed >>> 4) % 7, inner: 3.4, middle: 7.4, outer: 10.8 };
 }
 
 function eyespotSample(x, y, seed, dark, light, accent) {
   const eye = eyespotGeometry(seed);
   const distance = Math.hypot(x - eye.x, y - eye.y);
-  if (distance < eye.inner) return { color: dark, alpha: 245 };
-  if (distance < eye.middle) return { color: light, alpha: 235 };
-  if (distance < eye.outer) return { color: accent, alpha: 220 };
+  const pupil = { r: 12, g: 15, b: 20 };
+  if (distance < eye.inner) {
+    const glint = Math.hypot(x - (eye.x - 1.2), y - (eye.y - 1.2)) < 0.9;
+    return { color: glint ? light : pupil, alpha: 248 };
+  }
+  if (distance < eye.middle) return { color: accent, alpha: 238 };
+  if (distance < eye.outer) return { color: pupil, alpha: 242 };
   return null;
 }
 

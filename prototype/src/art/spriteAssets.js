@@ -1,11 +1,15 @@
 import { fishSpriteParts, speciesSpriteDefaults, spriteConfig } from "./assetManifest.js";
 import { attachmentOffset, bodyAnatomy, dorsalFinAnatomy, tailAnatomy, ventralFinAnatomy } from "./fishAnatomy.js";
+import { eelVisualAnimationConfig } from "../config/fishConfig.js";
 
 const cache = new Map();
 const tintedCache = new Map();
 const clippedPatternCache = new Map();
 const proceduralPatternCache = new Map();
-const patternAccents = ["#f2c14e", "#f26d4f", "#42d6c5", "#7657e8", "#e64f9b", "#4f8ff2"];
+const wholeFishBoundsCache = new Map();
+let eelRenderCanvas = null;
+let wholeFishRenderCanvas = null;
+let wholeFishOverlayCanvas = null;
 
 export function loadFishSpriteAssets() {
   const files = collectFishSpriteFiles();
@@ -24,6 +28,331 @@ export function hasLoadedFishSprites() {
 }
 
 export function drawFishSprites(ctx, item, options) {
+  if (item.specialSprite) return drawFishSpritesFlat(ctx, item, options);
+  if (item.body !== "eel" && usesWholeFishPattern(item)) return drawFishWithWholeOverlay(ctx, item, options);
+  if (item.body !== "eel") return drawFishSpritesFlat(ctx, item, options);
+  if (!eelRenderCanvas) {
+    eelRenderCanvas = document.createElement("canvas");
+    eelRenderCanvas.width = 256;
+    eelRenderCanvas.height = 112;
+  }
+  const eelCtx = eelRenderCanvas.getContext("2d");
+  eelCtx.clearRect(0, 0, eelRenderCanvas.width, eelRenderCanvas.height);
+  eelCtx.save();
+  eelCtx.translate(eelRenderCanvas.width / 2, eelRenderCanvas.height / 2);
+  const wholePattern = usesWholeFishPattern(item);
+  const drawn = drawFishSpritesFlat(eelCtx, item, { ...options, wholePattern });
+  eelCtx.restore();
+  if (!drawn) return false;
+  if (wholePattern) applyWholeFishOverlay(eelRenderCanvas, item, options.palette);
+
+  const centerX = eelRenderCanvas.width / 2;
+  const centerY = eelRenderCanvas.height / 2;
+  const motion = eelVisualAnimationConfig;
+  const motionPhase = item.phase * motion.phaseSpeed;
+  for (let sourceX = 0; sourceX < eelRenderCanvas.width; sourceX += 1) {
+    const localX = sourceX - centerX;
+    const rearInfluence = Math.max(motion.minimumRearInfluence, Math.min(1, (42 - localX) / 92));
+    const lateralWave = Math.sin(localX * motion.waveLength + motionPhase);
+    const secondaryWave = Math.sin(localX * motion.waveLength * 0.48 + motionPhase * 0.62 + 1.8);
+    const offsetY = lateralWave * motion.centerlineAmplitude * rearInfluence
+      + secondaryWave * motion.secondaryAmplitude * rearInfluence;
+    const sideExposure = Math.abs(Math.cos(localX * motion.waveLength + motionPhase));
+    const travelingHighlight = Math.max(0, Math.cos(localX * motion.waveLength * 0.82 + motionPhase * 1.18));
+    const profileScale = 1 - sideExposure * motion.profileCompression * rearInfluence;
+    const destinationHeight = eelRenderCanvas.height * profileScale;
+    const destinationY = -centerY + offsetY + (eelRenderCanvas.height - destinationHeight) / 2;
+    ctx.drawImage(eelRenderCanvas, sourceX, 0, 1, eelRenderCanvas.height,
+      localX, destinationY, 1, destinationHeight);
+    if (travelingHighlight > motion.shimmerThreshold) {
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = (travelingHighlight - motion.shimmerThreshold)
+        / (1 - motion.shimmerThreshold) * motion.shimmerAlpha;
+      ctx.drawImage(eelRenderCanvas, sourceX, 0, 1, eelRenderCanvas.height,
+        localX, destinationY, 1, destinationHeight);
+      ctx.restore();
+    }
+  }
+  return true;
+}
+
+function drawFishWithWholeOverlay(ctx, item, options) {
+  ensureWholeFishCanvases();
+  const renderCtx = wholeFishRenderCanvas.getContext("2d");
+  renderCtx.clearRect(0, 0, wholeFishRenderCanvas.width, wholeFishRenderCanvas.height);
+  renderCtx.save();
+  renderCtx.translate(wholeFishRenderCanvas.width / 2, wholeFishRenderCanvas.height / 2);
+  const drawn = drawFishSpritesFlat(renderCtx, item, { ...options, wholePattern: true });
+  renderCtx.restore();
+  if (!drawn) return false;
+  applyWholeFishOverlay(wholeFishRenderCanvas, item, options.palette);
+  ctx.drawImage(wholeFishRenderCanvas,
+    -wholeFishRenderCanvas.width / 2, -wholeFishRenderCanvas.height / 2);
+  return true;
+}
+
+function ensureWholeFishCanvases() {
+  if (!wholeFishRenderCanvas) {
+    wholeFishRenderCanvas = document.createElement("canvas");
+    wholeFishRenderCanvas.width = 192;
+    wholeFishRenderCanvas.height = 112;
+  }
+  if (!wholeFishOverlayCanvas) {
+    wholeFishOverlayCanvas = document.createElement("canvas");
+    wholeFishOverlayCanvas.width = 192;
+    wholeFishOverlayCanvas.height = 112;
+  }
+}
+
+function applyWholeFishOverlay(renderCanvas, item, palette) {
+  ensureWholeFishCanvases();
+  if (wholeFishOverlayCanvas.width !== renderCanvas.width || wholeFishOverlayCanvas.height !== renderCanvas.height) {
+    wholeFishOverlayCanvas.width = renderCanvas.width;
+    wholeFishOverlayCanvas.height = renderCanvas.height;
+  }
+  const overlayCtx = wholeFishOverlayCanvas.getContext("2d");
+  const renderCtx = renderCanvas.getContext("2d");
+  const width = renderCanvas.width;
+  const height = renderCanvas.height;
+  overlayCtx.clearRect(0, 0, width, height);
+  const colors = palette[item.patternColor] ?? palette[item.color] ?? palette.blue;
+  const accentColors = palette[item.accentColor] ?? colors;
+  const seed = hashString(`${item.id ?? item.name ?? "fish"}:whole-overlay`);
+  const sourcePixels = renderCtx.getImageData(0, 0, width, height);
+  const rawBounds = opaqueBounds(sourcePixels, width, height);
+  const bounds = stableWholeFishBounds(item, rawBounds, width, height);
+  if (!bounds) return;
+  if (item.pattern && item.pattern !== "plain" && item.pattern !== "eyespot") {
+    if (item.pattern === "spots") paintWholeFishGradient(overlayCtx, renderCanvas, bounds, colors, seed);
+    else paintWholeFishPattern(overlayCtx, sourcePixels, width, height, bounds, item, colors, accentColors, seed);
+    compositeWholeFishLayer(renderCtx, item.pattern === "spots" ? "overlay"
+      : (item.pattern === "banner" || item.pattern === "neon") ? "source-over" : "hard-light",
+    item.pattern === "spots" ? 0.78 : item.pattern === "banner" ? 0.9 : item.pattern === "neon" ? 0.94 : 0.84);
+  }
+  if (item.overlayPattern && item.overlayPattern !== "none") {
+    overlayCtx.clearRect(0, 0, width, height);
+    paintSecondaryPattern(overlayCtx, sourcePixels, width, height, bounds, item, colors, accentColors, seed);
+    compositeWholeFishLayer(renderCtx, item.overlayPattern === "rainbow" ? "overlay" : "source-over",
+      item.overlayPattern === "rainbow" ? 0.78 : 0.88);
+  }
+  if (item.finPattern === "edge") {
+    overlayCtx.clearRect(0, 0, width, height);
+    paintFinEdge(overlayCtx, sourcePixels, width, height, bounds, accentColors);
+    compositeWholeFishLayer(renderCtx, "source-over", 0.9);
+  }
+}
+
+function compositeWholeFishLayer(renderCtx, mode, alpha) {
+  renderCtx.save();
+  renderCtx.globalCompositeOperation = mode;
+  renderCtx.globalAlpha = alpha;
+  renderCtx.drawImage(wholeFishOverlayCanvas, 0, 0);
+  renderCtx.restore();
+}
+
+function stableWholeFishBounds(item, rawBounds, canvasWidth, canvasHeight) {
+  if (!rawBounds) return null;
+  const key = [item.body, item.tail, item.dorsalFin, item.ventralFin].join(":");
+  if (wholeFishBoundsCache.has(key)) return wholeFishBoundsCache.get(key);
+  const padding = 3;
+  const left = Math.max(0, rawBounds.left - padding);
+  const right = Math.min(canvasWidth - 1, rawBounds.right + padding);
+  const top = Math.max(0, rawBounds.top - padding);
+  const bottom = Math.min(canvasHeight - 1, rawBounds.bottom + padding);
+  const stable = { left, right, top, bottom, width: right - left + 1, height: bottom - top + 1 };
+  wholeFishBoundsCache.set(key, stable);
+  return stable;
+}
+
+function usesWholeFishPattern(item) {
+  const mainPattern = item.pattern && item.pattern !== "plain" && item.pattern !== "eyespot";
+  return Boolean(mainPattern || (item.overlayPattern && item.overlayPattern !== "none")
+    || (item.finPattern && item.finPattern !== "none"));
+}
+
+function opaqueBounds(imageData, width, height) {
+  let left = width, right = -1, top = height, bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (imageData.data[(y * width + x) * 4 + 3] < 12) continue;
+      left = Math.min(left, x); right = Math.max(right, x);
+      top = Math.min(top, y); bottom = Math.max(bottom, y);
+    }
+  }
+  return right < left ? null : { left, right, top, bottom, width: right - left + 1, height: bottom - top + 1 };
+}
+
+function paintWholeFishGradient(ctx, renderCanvas, bounds, colors, seed) {
+  const vertical = (seed & 1) === 0;
+  const gradient = vertical
+    ? ctx.createLinearGradient(0, bounds.top, 0, bounds.bottom)
+    : ctx.createLinearGradient(bounds.left, 0, bounds.right, 0);
+  gradient.addColorStop(0, colors[1]);
+  gradient.addColorStop(0.5, colors[0]);
+  gradient.addColorStop(1, colors[2]);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.drawImage(renderCanvas, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function paintWholeFishPattern(ctx, sourcePixels, width, height, bounds, item, colors, accentColors, seed) {
+  const pixels = ctx.createImageData(width, height);
+  const dark = hexToRgb(colors[1]);
+  const light = hexToRgb(colors[2]);
+  const accent = hexToRgb(accentColors[0]);
+  for (let y = bounds.top; y <= bounds.bottom; y += 1) {
+    for (let x = bounds.left; x <= bounds.right; x += 1) {
+      const pixel = (y * width + x) * 4;
+      const sourceAlpha = sourcePixels.data[pixel + 3];
+      if (sourceAlpha < 12) continue;
+      const localX = (x - bounds.left) / Math.max(1, bounds.width - 1) * 80;
+      const localY = (y - bounds.top) / Math.max(1, bounds.height - 1) * 56;
+      const broad = valueNoise(localX / 18, localY / 15, seed);
+      const detail = valueNoise(localX / 8, localY / 7, seed + 7919);
+      const sample = proceduralPatternSample(item.pattern, localX, localY,
+        broad * 0.78 + detail * 0.22, seed, dark, light, accent);
+      if (!sample) continue;
+      pixels.data[pixel] = sample.color.r;
+      pixels.data[pixel + 1] = sample.color.g;
+      pixels.data[pixel + 2] = sample.color.b;
+      pixels.data[pixel + 3] = Math.min(sourceAlpha, sample.alpha);
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
+function paintSecondaryPattern(ctx, sourcePixels, width, height, bounds, item, colors, accentColors, seed) {
+  if (item.overlayPattern === "lateralLine") {
+    paintNaturalLateralLine(ctx, sourcePixels, width, height, bounds, seed);
+    return;
+  }
+  const pixels = ctx.createImageData(width, height);
+  const dark = hexToRgb(colors[1]);
+  const light = hexToRgb(colors[2]);
+  const accent = hexToRgb(accentColors[0]);
+  for (let y = bounds.top; y <= bounds.bottom; y += 1) {
+    for (let x = bounds.left; x <= bounds.right; x += 1) {
+      const pixel = (y * width + x) * 4;
+      const sourceAlpha = sourcePixels.data[pixel + 3];
+      if (sourceAlpha < 12) continue;
+      const localX = (x - bounds.left) / Math.max(1, bounds.width - 1) * 80;
+      const localY = (y - bounds.top) / Math.max(1, bounds.height - 1) * 56;
+      const sample = secondaryPatternSample(item.overlayPattern, localX, localY, seed, dark, light, accent);
+      if (!sample) continue;
+      pixels.data[pixel] = sample.color.r;
+      pixels.data[pixel + 1] = sample.color.g;
+      pixels.data[pixel + 2] = sample.color.b;
+      pixels.data[pixel + 3] = Math.min(sourceAlpha, sample.alpha);
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
+function paintNaturalLateralLine(ctx, sourcePixels, width, height, bounds, seed) {
+  const pixels = ctx.createImageData(width, height);
+  for (let x = bounds.left; x <= bounds.right; x += 1) {
+    const run = longestOpaqueColumnRun(sourcePixels, width, x, bounds.top, bounds.bottom);
+    if (!run || run.length < 3) continue;
+    const localX = (x - bounds.left) / Math.max(1, bounds.width - 1) * 80;
+    if (localX < 21 || localX > 66) continue;
+    const progress = (localX - 21) / 45;
+    const tailFade = smoothStep(Math.min(1, progress * 2.15));
+    const gillFade = smoothStep(Math.min(1, (1 - progress) * 5.5));
+    const segmentOffset = (hashNoise(Math.floor(localX / 13), 2, seed + 5303) - 0.5) * 0.8;
+    const center = run.start + run.length * 0.53 + segmentOffset;
+    const halfWidth = 0.52;
+    const yStart = Math.max(run.start, Math.round(center));
+    const yEnd = Math.min(run.end, yStart + (hashNoise(Math.floor(localX / 17), 7, seed) > 0.82 ? 1 : 0));
+    for (let y = yStart; y <= yEnd; y += 1) {
+      const pixel = (y * width + x) * 4;
+      const sourceAlpha = sourcePixels.data[pixel + 3];
+      if (sourceAlpha < 12) continue;
+      const distance = Math.abs(y - center);
+      if (distance > halfWidth) continue;
+      const sourceLuminance = sourcePixels.data[pixel] * 0.2126
+        + sourcePixels.data[pixel + 1] * 0.7152 + sourcePixels.data[pixel + 2] * 0.0722;
+      const darkBody = sourceLuminance < 105;
+      pixels.data[pixel] = darkBody ? 154 : 18;
+      pixels.data[pixel + 1] = darkBody ? 190 : 27;
+      pixels.data[pixel + 2] = darkBody ? 198 : 35;
+      pixels.data[pixel + 3] = Math.min(sourceAlpha, Math.round((darkBody ? 112 : 142) * tailFade * gillFade));
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
+function longestOpaqueColumnRun(sourcePixels, width, x, top, bottom) {
+  let best = null;
+  let start = null;
+  for (let y = top; y <= bottom + 1; y += 1) {
+    const opaque = y <= bottom && sourcePixels.data[(y * width + x) * 4 + 3] >= 18;
+    if (opaque && start == null) start = y;
+    if (opaque || start == null) continue;
+    const run = { start, end: y - 1, length: y - start };
+    if (!best || run.length > best.length) best = run;
+    start = null;
+  }
+  return best;
+}
+
+function secondaryPatternSample(type, x, y, seed, dark, light, accent) {
+  const bodyDistance = ((x - 42) / 31) ** 2 + ((y - 28) / 18) ** 2;
+  if (type === "rainbow") {
+    if (bodyDistance > 1) return null;
+    const rainbow = [
+      { r: 244, g: 91, b: 70 }, { r: 245, g: 185, b: 55 },
+      { r: 83, g: 210, b: 137 }, { r: 68, g: 190, b: 235 }, { r: 118, g: 98, b: 225 },
+    ];
+    const position = Math.max(0, Math.min(0.999, (x - 10) / 65)) * (rainbow.length - 1);
+    const index = Math.floor(position);
+    return { color: mixRgb(rainbow[index], rainbow[index + 1] ?? rainbow[index], position - index), alpha: 165 };
+  }
+  if (type === "shoulderPatch") {
+    const dx = (x - 18) / 11;
+    const dy = (y - 28) / 14;
+    const irregular = (valueNoise(x / 8, y / 8, seed + 6101) - 0.5) * 0.24;
+    return dx * dx + dy * dy < 0.9 + irregular ? { color: accent, alpha: 220 } : null;
+  }
+  if (type === "verticalWedges") {
+    if (bodyDistance > 1.05) return null;
+    const downward = Math.max(0, Math.min(1, (y - 10) / 40));
+    const spread = 0.58 + downward * 0.8;
+    const phase = positiveModulo((x + Math.sin(y * 0.16 + seed) * 1.5) / spread, 13);
+    return phase < 4.2 ? { color: dark, alpha: 205 } : null;
+  }
+  return null;
+}
+
+function paintFinEdge(ctx, sourcePixels, width, height, bounds, accentColors) {
+  const pixels = ctx.createImageData(width, height);
+  const edgeColor = hexToRgb(accentColors[2]);
+  for (let y = bounds.top + 1; y < bounds.bottom; y += 1) {
+    for (let x = bounds.left + 1; x < bounds.right; x += 1) {
+      const pixel = (y * width + x) * 4;
+      const alpha = sourcePixels.data[pixel + 3];
+      if (alpha < 35) continue;
+      const localX = (x - bounds.left) / Math.max(1, bounds.width - 1) * 80;
+      const localY = (y - bounds.top) / Math.max(1, bounds.height - 1) * 56;
+      const bodyDistance = ((localX - 42) / 31) ** 2 + ((localY - 28) / 18) ** 2;
+      if (bodyDistance < 0.96) continue;
+      const neighborTransparent = sourcePixels.data[pixel - 4 + 3] < 20
+        || sourcePixels.data[pixel + 4 + 3] < 20
+        || sourcePixels.data[pixel - width * 4 + 3] < 20
+        || sourcePixels.data[pixel + width * 4 + 3] < 20;
+      if (!neighborTransparent) continue;
+      pixels.data[pixel] = edgeColor.r;
+      pixels.data[pixel + 1] = edgeColor.g;
+      pixels.data[pixel + 2] = edgeColor.b;
+      pixels.data[pixel + 3] = Math.min(alpha, 235);
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
+function drawFishSpritesFlat(ctx, item, options) {
   if (!hasLoadedFishSprites()) return false;
 
   const { activeSymptoms } = options;
@@ -45,23 +374,31 @@ export function drawFishSprites(ctx, item, options) {
   const frame = Math.floor(item.phase * 2) % spriteConfig.frameCount;
   const finsKey = activeSymptoms.includes("clampedFins") ? "clamped" : defaults.fins;
   const body = bodyAnatomy[item.body ?? defaults.body] ?? bodyAnatomy.slender;
+  const bodyFrameCount = body.frameCount ?? 1;
+  const bodyFrame = Math.floor(item.phase * (body.animationSpeed ?? 1)) % bodyFrameCount;
+  const tailAnchor = bodyFrameAnchor(body, "tail", bodyFrame);
+  const dorsalAnchor = bodyFrameAnchor(body, "dorsal", bodyFrame);
+  const ventralAnchor = bodyFrameAnchor(body, "ventral", bodyFrame);
   const tail = tailAnatomy[item.tail] ?? tailAnatomy.short;
   const dorsalFin = dorsalFinAnatomy[item.dorsalFin ?? finsKey] ?? dorsalFinAnatomy.normal;
   const ventralFin = ventralFinAnatomy[item.ventralFin ?? finsKey] ?? ventralFinAnatomy.normal;
   const advancedEldritch = (item.eldritchStage ?? 0) >= 4;
-  const colors = options.palette[item.color];
+  const colors = options.palette[item.color] ?? options.palette.blue;
+  const patternColors = options.palette[item.patternColor] ?? colors;
+  const accentColors = options.palette[item.accentColor] ?? colors;
   const tailScale = tail.scale * body.partScales.tail * (advancedEldritch ? 1.28 : 1);
-  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, body.anchors.tail, tail.socket, tailScale, colors)) return false;
+  if (!drawAttachedPart(ctx, tail.file, "shadow", frame, tailAnchor, tail.socket, tailScale, accentColors, body.frameWidth)) return false;
   if (item.pattern === "eyespot"
-    && !drawTailEyespot(ctx, tail.file, frame, body.anchors.tail, tail.socket, tailScale, item, colors)) return false;
+    && !drawTailEyespot(ctx, tail.file, frame, tailAnchor, tail.socket, tailScale, item, patternColors, body.frameWidth)) return false;
   // Attachment roots belong behind the body. Drawing the body last hides the
   // hard socket edges and makes the independently animated parts read as one fish.
-  if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, body.anchors.dorsal, dorsalFin.socket, dorsalFin.scale * body.partScales.dorsal * (advancedEldritch ? 1.18 : 1), colors)) return false;
-  if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, body.anchors.ventral, ventralFin.socket, ventralFin.scale * body.partScales.ventral * (advancedEldritch ? 1.75 : 1), colors)) return false;
-  if (!drawAttachedPart(ctx, body.file, "base", 0, [0, 0], [0, 0], body.scale, colors)) return false;
+  const dorsalSocket = dorsalFin.frameSockets?.[frame] ?? dorsalFin.socket;
+  if (!drawAttachedPart(ctx, dorsalFin.file, "shadow", frame, dorsalAnchor, dorsalSocket, dorsalFin.scale * body.partScales.dorsal * (advancedEldritch ? 1.18 : 1), accentColors, body.frameWidth)) return false;
+  if (!drawAttachedPart(ctx, ventralFin.file, "shadow", frame, ventralAnchor, ventralFin.socket, ventralFin.scale * body.partScales.ventral * (advancedEldritch ? 1.75 : 1), accentColors, body.frameWidth)) return false;
+  if (!drawBodyPart(ctx, body, bodyFrame, colors)) return false;
 
-  if (item.pattern && item.pattern !== "plain") {
-    const pattern = getProceduralPattern(body.file, item, colors);
+  if (item.pattern && item.pattern !== "plain" && !options.wholePattern) {
+    const pattern = getProceduralPattern(body.file, item, patternColors);
     if (!pattern) return false;
     ctx.drawImage(pattern, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
       -spriteConfig.frameWidth / 2, -spriteConfig.frameHeight / 2, spriteConfig.frameWidth, spriteConfig.frameHeight);
@@ -80,12 +417,12 @@ export function drawFishSprites(ctx, item, options) {
   return true;
 }
 
-function getProceduralPattern(bodyFile, item, colors) {
+function getProceduralPattern(bodyFile, item, patternColors) {
   const body = cache.get(bodyFile);
   if (!body || !body.complete || body.naturalWidth === 0) return null;
   const type = item.pattern ?? "plain";
   const seed = `${item.id ?? item.name ?? "fish"}:${item.genotype?.pattern?.join("|") ?? type}`;
-  const key = `${bodyFile}:${type}:${seed}:${colors.join("|")}`;
+  const key = `${bodyFile}:${type}:${seed}:${patternColors.join("|")}`;
   if (proceduralPatternCache.has(key)) return proceduralPatternCache.get(key);
 
   const canvas = document.createElement("canvas");
@@ -93,11 +430,10 @@ function getProceduralPattern(bodyFile, item, colors) {
   canvas.height = spriteConfig.frameHeight;
   const patternCtx = canvas.getContext("2d");
   const pixels = patternCtx.createImageData(canvas.width, canvas.height);
-  const dark = hexToRgb(colors[1]);
-  const light = hexToRgb(colors[2]);
+  const dark = hexToRgb(patternColors[1]);
+  const light = hexToRgb(patternColors[2]);
   const seedNumber = hashString(seed);
-  const accent = hexToRgb(patternAccents[seedNumber % patternAccents.length]);
-  const spots = createPatternSpots(seedNumber);
+  const accent = hexToRgb(patternColors[0]);
   for (let y = 0; y < canvas.height; y += 1) {
     for (let x = 0; x < canvas.width; x += 1) {
       // The face remains readable even on fish with very dense markings.
@@ -105,7 +441,7 @@ function getProceduralPattern(bodyFile, item, colors) {
       const broad = valueNoise(x / 18, y / 15, seedNumber);
       const detail = valueNoise(x / 8, y / 7, seedNumber + 7919);
       const noise = broad * 0.78 + detail * 0.22;
-      const sample = proceduralPatternSample(type, x, y, noise, seedNumber, spots, dark, light, accent);
+      const sample = proceduralPatternSample(type, x, y, noise, seedNumber, dark, light, accent);
       if (!sample) continue;
       const offset = (y * canvas.width + x) * 4;
       pixels.data[offset] = sample.color.r;
@@ -122,19 +458,7 @@ function getProceduralPattern(bodyFile, item, colors) {
   return canvas;
 }
 
-function proceduralPatternSample(type, x, y, noise, seed, spots, dark, light, accent) {
-  if (type === "spots") {
-    const spot = spots.find((candidate) => {
-      const dx = (x - candidate.x) / candidate.rx;
-      const dy = (y - candidate.y) / candidate.ry;
-      const edgeNoise = hashNoise(x + candidate.index * 7, y, seed) * 0.28;
-      return dx * dx + dy * dy <= 0.86 + edgeNoise;
-    });
-    if (!spot) return null;
-    const normalizedY = (y - spot.y) / spot.ry;
-    const color = normalizedY > 0.18 ? dark : (spot.light ? light : accent);
-    return { color, alpha: normalizedY > 0.18 ? 225 : 210 };
-  }
+function proceduralPatternSample(type, x, y, noise, seed, dark, light, accent) {
   if (type === "stripe") {
     const spacing = 9 + seed % 4;
     const slope = ((seed >>> 5) % 7) - 3;
@@ -151,13 +475,40 @@ function proceduralPatternSample(type, x, y, noise, seed, spots, dark, light, ac
     const phase = positiveModulo(irregularX + seed % spacing, spacing);
     return phase < 6 ? { color: phase < 1.3 ? light : accent, alpha: phase < 1.3 ? 180 : 220 } : null;
   }
+  if (type === "banner") {
+    const headBoundary = 18 + Math.sin(y * 0.2 + seed) * 2.2;
+    const headPatch = x < headBoundary && y > 15 && y < 43;
+    if (headPatch) return { color: accent, alpha: 232 };
+    const downward = Math.max(0, Math.min(1, (y - 7) / 48));
+    const fanSpread = 0.48 + downward * 0.92;
+    const slanted = x + y * 0.58 + (valueNoise(x / 17, y / 14, seed + 1889) - 0.5) * 1.8;
+    const phase = positiveModulo(slanted / fanSpread + seed % 15, 20);
+    if (phase < 8.1) return { color: light, alpha: 248 };
+    if (phase < 9.15) return { color: dark, alpha: 188 };
+    return null;
+  }
+  if (type === "neon") {
+    const sideLine = 27 + Math.sin(x * 0.075 + seed * 0.01) * 1.15
+      + (valueNoise(x / 18, 2, seed + 2081) - 0.5) * 1.1;
+    const lineDistance = Math.abs(y - sideLine);
+    if (x > 9 && x < 72 && lineDistance < 1.75) return { color: light, alpha: 252 };
+    if (x > 12 && x < 70 && lineDistance < 3.1) return { color: light, alpha: 112 };
+
+    const redStart = 35 + Math.sin(y * 0.18 + seed) * 2.2;
+    const lowerBoundary = sideLine + 4.2 + Math.sin(x * 0.11 + seed * 0.02) * 1.1;
+    if (x > redStart && y > lowerBoundary && y < 47) {
+      const lowerFade = Math.max(0.45, 1 - Math.abs(y - 38) / 16);
+      return { color: accent, alpha: Math.round(150 * lowerFade) };
+    }
+    return null;
+  }
   if (type === "blotches" || type === "koi") {
     if (noise > 0.57) return { color: type === "koi" ? accent : dark, alpha: Math.min(225, 105 + Math.round((noise - 0.57) * 760)) };
     if (type === "koi" && noise < 0.29) return { color: light, alpha: 185 };
     return null;
   }
   if (type === "reticulated") {
-    return isScaleArc(x, y, seed) ? { color: dark, alpha: 145 } : null;
+    return reticulatedSample(x, y, noise, seed, dark, light, accent);
   }
   if (type === "zoned") {
     const frontBoundary = 54 + Math.sin(y * 0.31 + seed) * 3;
@@ -175,22 +526,17 @@ function proceduralPatternSample(type, x, y, noise, seed, spots, dark, light, ac
     return eyespotSample(x, y, seed, dark, light, accent);
   }
   if (type === "glow") {
-    const wave = Math.abs(positiveModulo(x + Math.sin(y * 0.31 + seed) * 4, 12) - 6);
-    return wave < 1.15 ? { color: light, alpha: 225 } : null;
+    const mainLine = 31 + Math.sin(x * 0.13 + seed * 0.01) * 3.4
+      + (valueNoise(x / 15, 2, seed + 421) - 0.5) * 2;
+    if (Math.abs(y - mainLine) < 1.15) return { color: light, alpha: 235 };
+    const secondLine = 23 + Math.sin(x * 0.105 + seed * 0.017 + 2.1) * 2.6;
+    if ((seed & 1) === 0 && x > 23 && x < 61 && Math.abs(y - secondLine) < 0.8) {
+      return { color: accent, alpha: 205 };
+    }
+    const sparkle = hashNoise(Math.floor(x / 7), Math.floor(y / 7), seed + 337) > 0.91;
+    return sparkle && x % 7 === 0 && y % 7 === 0 ? { color: light, alpha: 230 } : null;
   }
   return null;
-}
-
-function createPatternSpots(seed) {
-  const count = 8 + seed % 5;
-  return Array.from({ length: count }, (_, index) => ({
-    index,
-    x: 12 + hashNoise(index, 11, seed) * 38,
-    y: 16 + hashNoise(index, 23, seed) * 32,
-    rx: 2.2 + hashNoise(index, 37, seed) * 1.8,
-    ry: 1.8 + hashNoise(index, 41, seed) * 1.4,
-    light: hashNoise(index, 53, seed) > 0.62,
-  }));
 }
 
 function eyespotGeometry(seed) {
@@ -210,10 +556,10 @@ function eyespotSample(x, y, seed, dark, light, accent) {
   return null;
 }
 
-function drawTailEyespot(ctx, file, frame, anchor, socket, scale, item, colors) {
+function drawTailEyespot(ctx, file, frame, anchor, socket, scale, item, colors, anchorFrameWidth = spriteConfig.frameWidth) {
   const image = getTailEyespotLayer(file, frame, anchor, socket, scale, item, colors);
   if (!image) return false;
-  const offset = attachmentOffset(anchor, socket, scale);
+  const offset = attachmentOffsetForFrame(anchor, socket, scale, anchorFrameWidth);
   ctx.drawImage(image, 0, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
     -spriteConfig.frameWidth / 2 + offset.x,
     -spriteConfig.frameHeight / 2 + offset.y,
@@ -236,7 +582,7 @@ function getTailEyespotLayer(file, frame, anchor, socket, scale, item, colors) {
   const pixels = layerCtx.createImageData(canvas.width, canvas.height);
   const dark = hexToRgb(colors[1]);
   const light = hexToRgb(colors[2]);
-  const accent = hexToRgb(patternAccents[seed % patternAccents.length]);
+  const accent = hexToRgb(colors[0]);
   const offset = attachmentOffset(anchor, socket, scale);
   for (let y = 0; y < canvas.height; y += 1) {
     for (let x = 0; x < canvas.width; x += 1) {
@@ -258,23 +604,44 @@ function getTailEyespotLayer(file, frame, anchor, socket, scale, item, colors) {
   return canvas;
 }
 
+function reticulatedSample(x, y, noise, seed, dark, light, accent) {
+  const bodyDistance = ((x - 43) / 29) ** 2 + ((y - 28) / 18) ** 2;
+  if (bodyDistance <= 1) {
+    if (!isScaleArc(x, y, seed)) return null;
+    const edgeFade = Math.max(0.28, 1 - Math.max(0, bodyDistance - 0.58) * 1.8);
+    const highlight = hashNoise(Math.floor(x / 8), Math.floor(y / 7), seed + 3301) > 0.78;
+    return {
+      color: highlight ? accent : dark,
+      alpha: Math.round((highlight ? 105 : 145) * edgeFade),
+    };
+  }
+
+  // Outside the central body ellipse the same pigment follows fin rays instead
+  // of pretending that scales continue over the fins and tail.
+  const rayPhase = positiveModulo(x * 0.34 + y + (noise - 0.5) * 5, 9.5);
+  const brokenRay = hashNoise(Math.floor(x / 5), Math.floor(y / 4), seed + 4513) > 0.31;
+  return rayPhase < 0.72 && brokenRay ? { color: light, alpha: 86 } : null;
+}
+
 function isScaleArc(x, y, seed) {
-  const spacingX = 6.4;
-  const spacingY = 5.1;
-  const approximateRow = Math.round((y - 13) / spacingY);
+  const spacingX = 10.2;
+  const spacingY = 7.4;
+  const approximateRow = Math.round((y - 12) / spacingY);
   for (let row = approximateRow - 1; row <= approximateRow + 1; row += 1) {
-    const rowJitter = (hashNoise(row, 71, seed) - 0.5) * 1.25;
-    const centerY = 13 + row * spacingY + rowJitter;
+    const rowJitter = (hashNoise(row, 71, seed) - 0.5) * 2.2;
+    const centerY = 12 + row * spacingY + rowJitter;
     const stagger = positiveModulo(row, 2) * spacingX * 0.5;
-    const approximateColumn = Math.round((x - 14 - stagger) / spacingX);
+    const approximateColumn = Math.round((x - 13 - stagger) / spacingX);
     for (let column = approximateColumn - 1; column <= approximateColumn + 1; column += 1) {
-      const jitterX = (hashNoise(column, row, seed + 991) - 0.5) * 1.4;
-      const jitterY = (hashNoise(column, row, seed + 1871) - 0.5) * 0.8;
-      const centerX = 14 + stagger + column * spacingX + jitterX;
-      const dx = (x - centerX) / (3.25 + hashNoise(column, row, seed + 43) * 0.55);
-      const dy = (y - centerY - jitterY) / (2.65 + hashNoise(column, row, seed + 79) * 0.5);
+      if (hashNoise(column, row, seed + 2711) < 0.24) continue;
+      const jitterX = (hashNoise(column, row, seed + 991) - 0.5) * 2.5;
+      const jitterY = (hashNoise(column, row, seed + 1871) - 0.5) * 1.5;
+      const centerX = 13 + stagger + column * spacingX + jitterX;
+      const dx = (x - centerX) / (5.1 + hashNoise(column, row, seed + 43) * 1.15);
+      const dy = (y - centerY - jitterY) / (3.6 + hashNoise(column, row, seed + 79) * 0.85);
       const radius = Math.hypot(dx, dy);
-      if (dy > -0.72 && Math.abs(radius - 1) < 0.16) return true;
+      const brokenEdge = hashNoise(Math.floor(x * 0.7), Math.floor(y * 0.8), seed + column * 31 + row) > 0.18;
+      if (dy > -0.08 && Math.abs(radius - 1) < 0.13 && brokenEdge) return true;
     }
   }
   return false;
@@ -314,16 +681,39 @@ function mixValue(a, b, amount) {
   return a + (b - a) * amount;
 }
 
-function drawAttachedPart(ctx, file, tint, frame, anchor, socket, scale, colors) {
+function drawAttachedPart(ctx, file, tint, frame, anchor, socket, scale, colors, anchorFrameWidth = spriteConfig.frameWidth) {
   const image = getTintedLayer(file, tint, colors);
   if (!image) return false;
-  const offset = attachmentOffset(anchor, socket, scale);
+  const offset = attachmentOffsetForFrame(anchor, socket, scale, anchorFrameWidth);
   ctx.drawImage(image, frame * spriteConfig.frameWidth, 0, spriteConfig.frameWidth, spriteConfig.frameHeight,
     -spriteConfig.frameWidth / 2 + offset.x,
     -spriteConfig.frameHeight / 2 + offset.y,
     spriteConfig.frameWidth * scale,
     spriteConfig.frameHeight * scale);
   return true;
+}
+
+function drawBodyPart(ctx, body, frame, colors) {
+  const image = getTintedLayer(body.file, "base", colors);
+  if (!image) return false;
+  const frameWidth = body.frameWidth ?? spriteConfig.frameWidth;
+  const frameHeight = body.frameHeight ?? spriteConfig.frameHeight;
+  const sourceX = frame * frameWidth;
+  const availableWidth = Math.max(0, Math.min(frameWidth, image.width - sourceX));
+  if (!availableWidth) return false;
+  ctx.drawImage(image, sourceX, 0, availableWidth, frameHeight,
+    -frameWidth / 2, -frameHeight / 2, availableWidth * body.scale, frameHeight * body.scale);
+  return true;
+}
+
+function bodyFrameAnchor(body, key, frame) {
+  return body.frameAnchors?.[key]?.[frame] ?? body.anchors[key];
+}
+
+function attachmentOffsetForFrame(anchor, socket, partScale, anchorFrameWidth) {
+  const offset = attachmentOffset(anchor, socket, partScale);
+  offset.x -= (anchorFrameWidth - spriteConfig.frameWidth) / 2;
+  return offset;
 }
 
 function getClippedLayer(file, bodyFile, frame) {

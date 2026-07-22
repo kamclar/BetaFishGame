@@ -3,6 +3,7 @@ import { describeHealth, describeStress, getActiveSymptoms, getDiseaseStage } fr
 import { categoryName } from "./data/speciesData.js";
 import { alleleName, geneticFeatureKeys, hiddenGeneRows, inheritedFeatureLabels } from "./systems/lineageSystem.js";
 import { csStoryUi } from "./i18n/csStory.js";
+import { colorLineForFish } from "./config/colorLineConfig.js";
 
 const traitInfo = {
   klidna: ["Klidna", "Pomaleji se stresuje."], skvrnita: ["Skvrnita", "Vyrazny dedicny vzor."],
@@ -38,11 +39,13 @@ export function createUi() {
   const ui = {
     fishName: document.getElementById("fishName"),
     fishSpecies: document.getElementById("fishSpecies"),
+    fishPortrait: document.getElementById("fishPortrait"),
     fishHealth: document.getElementById("fishHealth"),
     fishStress: document.getElementById("fishStress"),
     fishHunger: document.getElementById("fishHunger"),
     fishAge: document.getElementById("fishAge"),
     fishRarity: document.getElementById("fishRarity"),
+    fishColorLine: document.getElementById("fishColorLine"),
     fishSex: document.getElementById("fishSex"),
     fishCategory: document.getElementById("fishCategory"),
     fishBehavior: document.getElementById("fishBehavior"),
@@ -99,6 +102,7 @@ export function renderTutorial(ui, step) {
   ui.tutorialContinue.textContent = step.button ?? "";
   ui.tutorialContinue.hidden = !step.button;
   ui.tutorialSkip.textContent = step.skipLabel;
+  ui.tutorialSkip.hidden = !step.canSkip;
   document.querySelector(step.target)?.classList.add("tutorial-focus");
 }
 
@@ -194,6 +198,8 @@ export function renderFishCard(ui, item) {
   ui.fishSpecies.textContent = item.species;
   ui.fishAge.textContent = item.age;
   ui.fishRarity.textContent = item.rarity;
+  const colorLine = colorLineForFish(item);
+  ui.fishColorLine.textContent = colorLine ? `${colorLine.name} · ${colorLine.rarity}` : "Bez pojmenovane linie";
   ui.appShell.dataset.rarity = item.rarity.toLowerCase();
   ui.fishSex.textContent = item.sex ?? "nezname";
   ui.fishCategory.textContent = categoryName(item.category);
@@ -321,6 +327,7 @@ export function clearFishCard(ui) {
   ui.fishHunger.textContent = "-";
   ui.fishAge.textContent = "-";
   ui.fishRarity.textContent = "-";
+  ui.fishColorLine.textContent = "-";
   ui.fishSex.textContent = "-";
   ui.fishCategory.textContent = "-";
   ui.fishBehavior.textContent = "-";

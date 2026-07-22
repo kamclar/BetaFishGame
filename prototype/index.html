@@ -14,6 +14,7 @@
       </div>
       <div class="window-buttons">
         <button type="button" data-window-action="pin" title="Pripnout nahore">Pin</button>
+        <button type="button" data-window-action="saves" title="Ulozit nebo nacist hru">Ulozeni</button>
         <button type="button" data-window-action="restart" title="Smazat ulozeni a zacit novou hru">Nova hra</button>
         <button type="button" data-window-action="minimize" title="Minimalizovat">_</button>
         <button type="button" data-window-action="close" title="Zavrit">X</button>
@@ -82,10 +83,6 @@
             <span class="jar test"></span>
             <span>Test vody</span>
           </button>
-          <button class="shelf-item" type="button" data-action="plant" title="Pridat rostlinu">
-            <span class="jar plant"></span>
-            <span>Rostlina</span>
-          </button>
           <button class="shelf-item" type="button" data-action="medicine" title="Pouzit lek na vybranou rybu">
             <span class="jar medicine"></span>
             <span>Lek</span>
@@ -126,6 +123,9 @@
           <p class="eyebrow">Karta ryby</p>
           <h2 id="fishName">Vyber rybu</h2>
           <p id="fishSpecies" class="muted">Klikni na rybu v akvariu.</p>
+          <div class="fish-portrait-frame" aria-label="Nahled vybrane ryby">
+            <canvas id="fishPortrait" width="240" height="104"></canvas>
+          </div>
 
           <div class="fish-card-tabs">
             <button type="button" class="active" data-fish-page="overview">Prehled</button>
@@ -153,6 +153,7 @@
               <dt>Rarita</dt>
               <dd id="fishRarity">-</dd>
             </div>
+            <div><dt>Barevna linie</dt><dd id="fishColorLine">-</dd></div>
             <div><dt>Pohlavi</dt><dd id="fishSex">-</dd></div>
             <div><dt>Kategorie</dt><dd id="fishCategory">-</dd></div>
             <div><dt>Chovani</dt><dd id="fishBehavior">-</dd></div>
@@ -192,7 +193,7 @@
         <div class="journal-page records-page" data-journal-content="records">
           <div class="journal-summary"><span id="journalCount">0 zaznamu</span><span class="important-key">* dulezite</span></div>
           <div class="daily-goals">
-            <p class="eyebrow">Dnesni cile</p>
+            <p class="eyebrow">Průběžné úkoly</p>
             <ul id="dailyGoalList"></ul>
           </div>
           <ul id="journalLog"></ul>
@@ -214,38 +215,75 @@
         <p class="eyebrow">Akvaristicky obchod</p>
         <div class="shop-balance" id="shopBalance">0 penez</div>
         <div class="shop-skill" id="shopSkill">Ucen · zkusenost 0/8</div>
+        <nav class="shop-tabs" aria-label="Kategorie obchodu">
+          <button type="button" class="active" data-shop-tab="fish">Ryby</button>
+          <button type="button" data-shop-tab="plants">Rostliny</button>
+          <button type="button" data-shop-tab="tools">Pomucky</button>
+        </nav>
         <div class="shop-grid">
-          <button type="button" id="buyFoodButton" class="shop-product" data-shop-item="food" data-price="10 penez">
+          <button type="button" id="buyFoodButton" class="shop-product" data-shop-item="food" data-shop-category="tools" data-price="10 penez">
             <span class="shop-product-icon jar flakes"></span>
             <span><strong>Krabicka vlocek</strong><small>Obsahuje 12 krmnych davek.</small></span>
             <b>10 penez</b>
           </button>
-          <button type="button" id="buySnailButton" class="shop-product" data-shop-item="snail" data-price="45 penez">
+          <button type="button" id="buySnailButton" class="shop-product" data-shop-item="snail" data-shop-category="fish" data-price="45 penez">
             <span class="shop-product-icon snail-icon">@</span>
             <span><strong>Ampularie</strong><small>Pomalu spasa rasy ze skla.</small></span>
             <b>45 penez</b>
           </button>
-          <button type="button" id="buyEggsButton" class="shop-product" data-shop-item="eggs" data-price="28 penez">
+          <button type="button" id="buyEggsButton" class="shop-product" data-shop-item="eggs" data-shop-category="fish" data-price="28 penez">
             <span class="shop-product-icon egg-icon">••</span>
             <span><strong>Jikry nezname linie</strong><small>Vlozi se do treci nadrze. Vylihne se 1–2 rybky.</small></span>
             <b>28 penez</b>
           </button>
-          <button type="button" id="buyFilterButton" class="shop-product" data-shop-item="filter" data-price="65 penez">
+          <button type="button" class="shop-product" data-shop-item="plant-vallisneria" data-shop-category="plants" data-plant-type="vallisneria">
+            <span class="shop-product-icon plant-preview vallisneria"></span>
+            <span><strong>Vallisnerie vlnita</strong><small>Rychla vysoka trava. Tvori husty ukryt u zadni steny.</small></span>
+            <b>8 penez</b>
+          </button>
+          <button type="button" class="shop-product" data-shop-item="plant-anubias" data-shop-category="plants" data-plant-type="anubias">
+            <span class="shop-product-icon plant-preview anubias"></span>
+            <span><strong>Anubias kamenni</strong><small>Odolna sirokolista rostlina. Snese mene svetla a roste pomalu.</small></span>
+            <b>12 penez</b>
+          </button>
+          <button type="button" class="shop-product" data-shop-item="plant-ludwigia" data-shop-category="plants" data-plant-type="redLudwigia">
+            <span class="shop-product-icon plant-preview ludwigia"></span>
+            <span><strong>Ruducha medena</strong><small>Medene stonky pro svetle nadrze. Roste rychleji, ale je citlivejsi.</small></span>
+            <b>10 penez</b>
+          </button>
+          <button type="button" class="shop-product" data-shop-item="plant-fern" data-shop-category="plants" data-plant-type="glowFern">
+            <span class="shop-product-icon plant-preview fern"></span>
+            <span><strong>Kapradina svetelkujici</strong><small>Kosata tyrkysova kapradina. Ma rada mirne svetlo a cistou vodu.</small></span>
+            <b>14 penez</b>
+          </button>
+          <button type="button" class="shop-product" data-shop-item="plant-floating" data-shop-category="plants" data-plant-type="floatingPlant">
+            <span class="shop-product-icon plant-preview floating"></span>
+            <span><strong>Pistie plovouci</strong><small>Plave na hladine, stini vodu a spousti dlouhe koreny.</small></span>
+            <b>16 penez</b>
+          </button>
+          <button type="button" id="buyFilterButton" class="shop-product" data-shop-item="filter" data-shop-category="tools" data-price="65 penez">
             <span class="shop-product-icon filter-icon">II</span>
             <span><strong>Tichy filtr II</strong><small>Zpomali zhorsovani vody a usazovani necistot.</small></span>
             <b>65 penez</b>
           </button>
-          <button type="button" id="buyHeaterButton" class="shop-product" data-shop-item="heater" data-price="55 penez">
+          <button type="button" id="buyHeaterButton" class="shop-product" data-shop-item="heater" data-shop-category="tools" data-price="55 penez">
             <span class="shop-product-icon heater-icon">25</span>
             <span><strong>Topitko s termostatem</strong><small>Drzi teplotu nadrze kolem 25 C.</small></span>
             <b>55 penez</b>
           </button>
-          <button type="button" id="buyAeratorButton" class="shop-product" data-shop-item="aerator" data-price="48 penez">
+          <button type="button" id="buyAeratorButton" class="shop-product" data-shop-item="aerator" data-shop-category="tools" data-price="48 penez">
             <span class="shop-product-icon aerator-icon">oO</span>
             <span><strong>Vzduchovani</strong><small>Zveda obsah kysliku hlavne v noci a pri prelidneni.</small></span>
             <b>48 penez</b>
           </button>
         </div>
+      </section>
+      <section class="save-panel" id="savePanel" aria-label="Ulozene hry" hidden>
+        <button type="button" id="savePanelClose" class="journal-close" aria-label="Zavrit">X</button>
+        <p class="eyebrow">Ulozene hry</p>
+        <h2>Ulozit a nacist</h2>
+        <p class="save-help">Automaticke ulozeni drzi soucasnou rozehranou hru. Tyto pozice zustanou zachovane i po volbe Nova hra.</p>
+        <div id="saveSlotList" class="save-slot-list"></div>
       </section>
     </main>
 

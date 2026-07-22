@@ -19,7 +19,7 @@ export const fishSpriteParts = {
     slender: "body_slender_v3",
     round: "body_round_v3",
     deep: "body_deep_v4",
-    eel: "body_eel_v1",
+    eel: "body_eel_v2",
     diamond: "body_diamond_v1",
     stocky: "body_stocky_v1",
     torpedo: "body_torpedo_v1",

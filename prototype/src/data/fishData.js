@@ -4,7 +4,7 @@ export const palette = {
   blue: ["#21b9ed", "#07527d", "#b9f4ff"],
   amber: ["#f28a24", "#783411", "#ffd36a"],
   violet: ["#9b59ff", "#3b176e", "#dfc5ff"],
-  pale: ["#8fd9bd", "#2e6658", "#e1fff1"],
+  pale: ["#ead9bb", "#75675e", "#fff8e8"],
   black: ["#405963", "#081217", "#91b7c2"],
   coral: ["#ff6f61", "#8d2334", "#ffc0a8"],
   ruby: ["#e82f55", "#680d2b", "#ff9aaa"],
@@ -326,21 +326,50 @@ export function updateStarterSchoolVisuals(items = fish) {
 }
 
 export function ensureAnatomyV6TestFish(items = fish) {
+  const rejectedV7Ids = new Set(["anatomy-v7-needle", "anatomy-v7-box", "anatomy-v7-fan"]);
+  const replacements = {
+    body: { needle: "slender", box: "stocky", fan: "deep" },
+    tail: { crescent: "fork", spade: "paddle", banner: "veil" },
+    dorsalFin: { split: "crown", flag: "sail", trailing: "low" },
+    ventralFin: { dagger: "sickle", fringe: "whisker", butterfly: "fan" },
+  };
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (rejectedV7Ids.has(items[index].id)) { items.splice(index, 1); continue; }
+    for (const [key, values] of Object.entries(replacements)) {
+      if (values[items[index][key]]) items[index][key] = values[items[index][key]];
+    }
+  }
   const variants = [
-    ["anatomy-v6-1", "Skvrnka", 390, 205, "ruby", "torpedo", "lyre", "low", "sickle", "blotches"],
-    ["anatomy-v6-2", "Hrbolka", 570, 295, "turquoise", "humpback", "double", "crown", "whisker", "stripe"],
-    ["anatomy-v6-3", "Kapicka", 750, 385, "gold", "teardrop", "paddle", "rounded", "fan", "spots"],
-    ["pattern-v1-bands", "Pasenka", 220, 155, "violet", "round", "fork", "sail", "paired", "bands", 1.5],
+    ["anatomy-v6-1", "Obsidiánová", 390, 205, "black", "torpedo", "lyre", "low", "sickle", "blotches", 2.2, "gold", "pale"],
+    ["anatomy-v6-2", "Královská", 570, 295, "cobalt", "humpback", "double", "crown", "whisker", "bands", 2.2, "gold", "blue"],
+    ["anatomy-v6-3", "Orchidejový plamen", 750, 385, "violet", "teardrop", "paddle", "rounded", "fan", "spots", 2.2, "amber", "pale"],
+    ["pattern-v1-bands", "Pasenka", 220, 155, "violet", "round", "fork", "sail", "paired", "bands", 1.5, "pale", "coral", "lateralLine", "edge"],
     ["pattern-v1-koi", "Koi", 360, 335, "coral", "stocky", "broad", "normal", "normal", "koi", 1.5],
     ["pattern-v1-net", "Sitka", 510, 145, "emerald", "deep", "short", "rounded", "fan", "reticulated", 1.5],
     ["pattern-v1-zones", "Pulnoc", 650, 235, "cobalt", "slender", "veil", "low", "sickle", "zoned", 1.5],
     ["pattern-v1-maze", "Klikatka", 800, 145, "magenta", "diamond", "double", "crown", "whisker", "maze", 1.5],
     ["pattern-v1-eye", "Okata", 900, 325, "amber", "teardrop", "broad", "rounded", "fan", "eyespot", 1.5],
+    ["pattern-v2-banner", "Praporka", 690, 170, "black", "diamond", "fork", "sail", "paired", "banner", 1.85, "pale", "amber"],
+    ["pattern-v2-neon", "Neonka", 520, 215, "cobalt", "slender", "fork", "low", "paired", "neon", 1.18, "turquoise", "ruby"],
+    ["pattern-v2-rainbow", "Duhovka", 430, 125, "cobalt", "deep", "fork", "rounded", "fan", "plain", 1.45, "turquoise", "magenta", "rainbow", "edge"],
+    ["pattern-v2-shoulder", "Raminka", 610, 355, "pale", "torpedo", "broad", "low", "paired", "plain", 1.5, "blue", "ruby", "shoulderPatch", "edge"],
+    ["pattern-v2-wedges", "Klinka", 840, 255, "turquoise", "humpback", "paddle", "crown", "fan", "plain", 1.55, "pale", "violet", "verticalWedges", "edge"],
   ];
-  for (const [id, name, x, y, color, body, tail, dorsalFin, ventralFin, pattern, size = 2] of variants) {
+  for (const [id, name, x, y, color, body, tail, dorsalFin, ventralFin, pattern, size = 2,
+    patternColor, accentColor, overlayPattern, finPattern] of variants) {
     const existing = items.find((item) => item.id === id);
     if (existing) {
-      Object.assign(existing, { color, body, tail, dorsalFin, ventralFin, pattern, size, specialSprite: null });
+      Object.assign(existing, { name, color, body, tail, dorsalFin, ventralFin, pattern, size, specialSprite: null });
+      if (patternColor) existing.patternColor = patternColor;
+      if (accentColor) existing.accentColor = accentColor;
+      if (overlayPattern) existing.overlayPattern = overlayPattern;
+      if (finPattern) existing.finPattern = finPattern;
+      existing.genotype ??= {};
+      existing.genotype.color = [color, color];
+      if (patternColor) existing.genotype.patternColor = [patternColor, patternColor];
+      if (accentColor) existing.genotype.accentColor = [accentColor, accentColor];
+      if (overlayPattern) existing.genotype.overlayPattern = [overlayPattern, overlayPattern];
+      if (finPattern) existing.genotype.finPattern = [finPattern, finPattern];
       continue;
     }
     items.push({
@@ -350,7 +379,8 @@ export function ensureAnatomyV6TestFish(items = fish) {
       history: ["Pridana pro kontrolu novych skladanych znaku."], traits: ["zvedava"],
       parents: [], offspring: [], sex: x % 2 ? "samec" : "samice", tank: "main",
       x, y, speed: 27 + (x % 5), dir: x % 3 ? 1 : -1, size, color,
-      body, tail, dorsalFin, ventralFin, pattern, specialSprite: null, phase: x * 0.013,
+      body, tail, dorsalFin, ventralFin, pattern, patternColor, accentColor, overlayPattern, finPattern,
+      specialSprite: null, phase: x * 0.013,
     });
   }
 }

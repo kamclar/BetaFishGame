@@ -229,6 +229,37 @@ Vnitrni uroven systemu:
 
 Genotyp se pri narozeni prepocita na fenotyp. Renderer z fenotypu slozi vzhled ryby.
 
+### Barevne pigmenty a vzacne linie
+
+Barva ryby se nesklada z jedine alely. Fenotyp nese tri samostatne dedicne pigmenty:
+
+- `color` jako zakladni paleta tela
+- `patternColor` pro proceduralni kresbu
+- `accentColor` pro ocas, ploutve a jemne lemy
+
+Kazdy pigment se dedi samostatne a muze mit skrytou alelu. Sourozenci proto mohou sdilet zakladni barvu, ale lisit se kresbou nebo akcentem. Proceduralni vzor urcuje rozlozeni pigmentu, nikoli jejich odstiny.
+
+Vetsina beznych ryb ma jednobarevnou nebo pribuznou kombinaci. Vybrane kontrastni trojice tvori pojmenovane barevne linie. Linie ma vlastni stupen vzacnosti, zaznam v karte a atlasu a cenovy bonus. Nemeni automaticky celkovou raritu tvaru ryby.
+
+Prvni pojmenovane linie:
+
+- Obsidiánová: cerne telo, zlata kresba, kremovy akcent
+- Královská: kobaltove telo, zlata kresba, modry akcent
+- Orchidejový plamen: fialove telo, oranzova kresba, bily akcent
+- Koi: svetle telo, koralova kresba, cerny akcent
+- Noční korál: cerne telo, koralova kresba, svetly akcent
+- Smaragdová maska: zelene telo, tyrkysova kresba, zlaty akcent
+- Měsíční: cerne telo, svetla kresba, bledě modry akcent
+- Výstražná: cerne telo, zlata kresba, koralovy akcent
+- Hlubinný signál: temne fialove telo, modra kresba, purpurovy akcent
+- Perleťová: svetle telo, modra kresba, levandulovy akcent
+- Císařská praporka: cerne telo, siroke svetle sikme stuhy a medovy akcent u hlavy
+- Neonový záblesk: tmave modre telo, tyrkysovy bocni pruh a rubinova spodni zadni cast
+
+Vznik pojmenovane linie ma byt chovatelsky cil. Zvysuje cenu a zajem zakazniku. Presne rozlozeni skvrn a pruhu zustava jedinecne podle seedu konkretni ryby.
+
+Kresba ryby se muze skladat z vice nezavisle dedenych vrstev. `pattern` urcuje hlavni kresbu tela, `overlayPattern` doplnkovou barevnou zonu nebo linku a `finPattern` kresbu ci lem ploutvi. Prvni doplnkove znaky jsou duhovy bok, bocni linka, ramenni skvrna, svisle kliny a kontrastni lem ploutvi. Jedna ryba tak muze spojit nekolik znaku bez vyroby samostatneho spritu.
+
 ## Rarity, affixy a vlastnosti
 
 Ryby maji raritu, affixy a bezne vlastnosti.

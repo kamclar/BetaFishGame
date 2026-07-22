@@ -147,6 +147,13 @@ body:hover .desktop-titlebar {
   background: url("./assets/items/item_medicine.png") center / contain no-repeat;
 }
 
+.held-cursor.filterPlace { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+.held-cursor.filterPlace::before {
+  left: -32px; top: -32px; width: 64px; height: 64px; border: 0; border-radius: 0;
+  background: url("./assets/equipment/filter_2.png") center / contain no-repeat;
+  image-rendering: pixelated; opacity: .82;
+}
+
 .held-cursor.feed,
 .held-cursor.test,
 .held-cursor.plant,
@@ -1451,8 +1458,136 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
 .egg-icon { display: grid; place-items: center; width: 46px; height: 42px; color: #e8e3bc; font: 900 22px Consolas, monospace; border: 2px solid #667f76; background: #18302e; }
 .filter-icon { display: block; width: 46px; height: 42px; overflow: hidden; color: transparent; border: 2px solid #526f73; background: #183034 url("./assets/equipment/filter_2.png") center / contain no-repeat; }
 .heater-icon, .aerator-icon { display: grid; place-items: center; width: 46px; height: 42px; border: 2px solid #526f73; background: #142b30; color: #9ad8ca; font: 900 13px Consolas, monospace; }
+.plant-preview {
+  position: relative; display: block; width: 46px; height: 42px; overflow: hidden;
+  border: 2px solid #526f73; background: linear-gradient(#173137 0 68%, #493b25 68%);
+  image-rendering: pixelated;
+}
+.plant-preview::before, .plant-preview::after { content: ""; position: absolute; bottom: 6px; left: 21px; transform-origin: 50% 100%; }
+.plant-preview.vallisneria::before { width: 3px; height: 31px; background: #73ae4d; box-shadow: -9px 5px #4d8d45, 8px 3px #91c85b, -4px 0 #326c50; transform: skewX(-8deg); }
+.plant-preview.anubias::before { width: 5px; height: 18px; background: #416c43; box-shadow: -8px 7px 0 3px #5f955b, 8px 4px 0 4px #78a968, -3px -2px 0 4px #477d56; }
+.plant-preview.ludwigia::before { width: 2px; height: 29px; background: #7b3f3d; box-shadow: -8px 5px #8e4b46, 8px 2px #b76050; }
+.plant-preview.ludwigia::after { width: 6px; height: 3px; background: #d17a58; box-shadow: -8px -7px #a9564d, 7px -12px #d88a62, -7px -20px #8e4948, 6px -25px #c86d57; }
+.plant-preview.fern::before { width: 4px; height: 28px; background: #2f8b82; box-shadow: -8px 6px #246e69, 8px 5px #4fb9a5; transform: rotate(-7deg); }
+.plant-preview.fern::after { width: 12px; height: 3px; background: #69d1b5; box-shadow: -8px -7px #3c9e91, 3px -13px #69d1b5, -7px -19px #2f8b82; transform: rotate(-12deg); }
+.plant-preview.floating::before { bottom: 24px; left: 13px; width: 20px; height: 9px; border-radius: 50%; background: #78a94b; box-shadow: 7px 2px #a8c95d, -5px 3px #527e3c; }
+.plant-preview.floating::after { bottom: 3px; left: 21px; width: 2px; height: 22px; background: #9a7b45; box-shadow: -5px 1px #76653d, 5px 3px #b59652; }
 .heater-icon { box-shadow: inset 0 -8px 0 #873e32; color: #ffd49a; }
 .aerator-icon { background: radial-gradient(circle at 30% 65%, transparent 0 4px, #8fcbd2 5px 6px, transparent 7px), radial-gradient(circle at 67% 34%, transparent 0 6px, #8fcbd2 7px 8px, transparent 9px), #142b30; color: transparent; }
+
+/* Reactive wooden shelf and categorized shop */
+.desktop-tank-mode .shelf {
+  border-left: 7px solid #120b07;
+  border-right: 7px solid #120b07;
+  border-radius: 12px 12px 0 0;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.08), transparent 12px, transparent calc(100% - 12px), rgba(0,0,0,.28)),
+    repeating-linear-gradient(90deg, #291b12 0 28px, #322116 28px 56px);
+  box-shadow: inset 5px 0 0 #704727, inset -5px 0 0 #704727,
+    inset 0 3px 0 #a46e42, inset 0 8px 0 #49301e, 0 -5px 0 #120c08;
+  scrollbar-width: thin;
+  scrollbar-color: #8c5b32 #160d08;
+}
+
+.desktop-tank-mode .shelf::-webkit-scrollbar { height: 8px; }
+.desktop-tank-mode .shelf::-webkit-scrollbar-track { background: #160d08; }
+.desktop-tank-mode .shelf::-webkit-scrollbar-thumb { border: 2px solid #160d08; background: #8c5b32; }
+.desktop-tank-mode .shelf::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+.desktop-tank-mode .shelf-item {
+  position: relative;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: transform 90ms ease-out, filter 90ms ease-out, background-color 90ms ease-out;
+}
+
+.desktop-tank-mode .shelf-item::after {
+  content: "";
+  position: absolute;
+  left: 4px; right: 4px; top: 3px;
+  height: 2px;
+  background: rgba(255, 230, 170, .14);
+  pointer-events: none;
+}
+
+.desktop-tank-mode .shelf-item:hover {
+  transform: translateY(-4px);
+  filter: brightness(1.15) saturate(1.08);
+}
+
+.desktop-tank-mode .shelf-item:hover > :first-child { transform: translateY(-2px) scale(1.06); }
+.desktop-tank-mode .shelf-item > :first-child { transition: transform 90ms ease-out; }
+
+.desktop-tank-mode .shelf-item:active {
+  transform: translateY(2px);
+  filter: brightness(.92);
+  border-bottom-width: 2px;
+  box-shadow: inset 0 3px 0 rgba(0,0,0,.38), 0 1px 0 #090604;
+}
+
+.desktop-tank-mode .shelf-item.selected {
+  transform: translateY(-3px);
+  filter: brightness(1.12);
+  box-shadow: inset 0 0 0 2px #d4b45f, 0 5px 0 #090604, 0 0 10px rgba(212,180,95,.24);
+}
+
+.desktop-tank-mode .shelf-item:focus-visible,
+.shop-product:focus-visible,
+.shop-tabs button:focus-visible { outline: 3px solid #e5c870; outline-offset: -3px; }
+
+.shop-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 8px 12px 0;
+  background: #0c191d;
+}
+
+.shop-tabs button {
+  padding: 8px 6px 7px;
+  border: 2px solid #38535a;
+  border-bottom: 4px solid #071014;
+  background: #14282e;
+  color: #91aaa7;
+  font: 900 11px Consolas, monospace;
+  cursor: pointer;
+  transition: transform 80ms ease-out, filter 80ms ease-out;
+}
+
+.shop-tabs button:hover { filter: brightness(1.2); transform: translateY(-1px); }
+.shop-tabs button:active { transform: translateY(2px); border-bottom-width: 2px; }
+.shop-tabs button.active { border-color: #d4b45f; background: #29464a; color: #f1dfae; }
+
+.shop-grid { max-height: min(440px, 58vh); overflow-y: auto; }
+.shop-product[hidden] { display: none; }
+.shop-product { margin-bottom: 5px; transition: transform 80ms ease-out, filter 80ms ease-out; }
+.shop-product:hover:not(:disabled) { transform: translateX(4px); filter: brightness(1.08); }
+.shop-product:active:not(:disabled) { transform: translate(4px, 2px); border-bottom-width: 2px; }
+
+.fish-portrait-frame {
+  position: relative;
+  margin: 0 12px 9px;
+  padding: 4px;
+  border: 2px solid #46636a;
+  border-bottom: 4px solid #071014;
+  background: #091519;
+  box-shadow: inset 0 0 0 2px rgba(151, 205, 193, .09);
+}
+
+.fish-portrait-frame::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-top: 1px solid rgba(222, 245, 229, .2);
+  pointer-events: none;
+}
+
+#fishPortrait {
+  display: block;
+  width: 100%;
+  height: 104px;
+  image-rendering: pixelated;
+}
 
 .held-cursor.scrape { width: 1px; height: 1px; border: 0; background: transparent; box-shadow: none; transform-origin: 0 0; }
 .held-cursor.scrape::before {
@@ -1603,3 +1738,16 @@ body:hover .desktop-tank-mode.hud-open .top-bar {
 .story-chapter small { display: block; padding-top: 6px; border-top: 1px dashed #566049; color: #93aa86; font: 9px/1.4 Consolas, monospace; }
 .story-chapter.locked { opacity: .62; filter: saturate(.45); }
 .story-chapter.locked h3 { color: #758682; }
+
+.save-panel { position: fixed; z-index: 40; left: 50%; top: 76px; width: min(620px, calc(100vw - 32px)); transform: translateX(-50%); padding: 18px; border: 4px solid #4c6465; background: #101d20; box-shadow: inset 0 0 0 2px #172a2d, 10px 12px 0 rgba(0,0,0,.58); color: #c4d1c8; }
+.save-panel[hidden] { display: none; }
+.save-panel h2 { margin: 3px 0 6px; color: #f0ddb0; font: 700 22px Georgia, serif; }
+.save-help { margin: 0 36px 14px 0; color: #8fa7a1; font: 10px/1.5 Consolas, monospace; }
+.save-slot-list { display: grid; gap: 8px; }
+.save-slot { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; padding: 10px; border: 2px solid #385355; background: #17282b; }
+.save-slot strong { color: #e6cf91; font: 700 14px Georgia, serif; }
+.save-slot small { display: block; margin-top: 4px; color: #8fa49e; font: 9px Consolas, monospace; }
+.save-slot-actions { display: flex; gap: 5px; }
+.save-slot button { padding: 7px 9px; border: 2px solid #50696a; background: #20383a; color: #d6dfd6; font: 900 9px Consolas, monospace; cursor: pointer; }
+.save-slot button:hover { border-color: #d0b668; color: #f3dda0; }
+.save-slot button.danger { border-color: #704844; color: #d8a49a; }

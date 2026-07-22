@@ -18,7 +18,11 @@ export const bodyAnatomy = {
     scale: 1,
   },
   eel: {
-    file: "body_eel_v1",
+    file: "body_eel_v2",
+    frameWidth: 96,
+    frameHeight: 64,
+    frameCount: 4,
+    animationSpeed: 2,
     anchors: { tail: [15, 32], fins: [50, 32], dorsal: [46, 29], ventral: [50, 36] },
     partScales: { tail: 0.35, dorsal: 0.75, ventral: 0.8 },
     scale: 1,
@@ -71,7 +75,10 @@ export const dorsalFinAnatomy = {
   clamped: { file: "fin_dorsal_clamped", socket: [50, 31], scale: 0.72 },
   sail: { file: "fin_dorsal_sail", socket: [46, 32], scale: 1 },
   spiky: { file: "fin_dorsal_spiky", socket: [46, 32], scale: 1 },
-  low: { file: "fin_dorsal_low_v1", socket: [46, 32], scale: 1 },
+  low: {
+    file: "fin_dorsal_low_v1", socket: [46, 32], scale: 1,
+    frameSockets: [[48.08, 32], [44.09, 32], [43.55, 32], [45.09, 32]],
+  },
   crown: { file: "fin_dorsal_crown_v1", socket: [46, 32], scale: 1 },
   rounded: { file: "fin_dorsal_round_v1", socket: [46, 32], scale: 0.72 },
 };

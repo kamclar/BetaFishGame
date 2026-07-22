@@ -130,8 +130,8 @@ export function drawAquarium(ctx, view, plants, tankId = "main", tank = null) {
   ctx.rect(glass.left, glass.top, glass.width, view.height - glass.top - 16);
   ctx.clip();
   drawWater(ctx, view, tankId, tank);
-  drawTankFilter(ctx, view, tank);
   drawPlants(ctx, view, plants, tank);
+  drawTankFilter(ctx, view, tank);
   if (tankId === "nursery" && tank?.spawning?.eggs) drawEggClutch(ctx, view, tank.spawning.eggs);
   drawTankDirt(ctx, view, tank);
   drawSnails(ctx, view, tank);
@@ -168,8 +168,11 @@ function drawTankFilter(ctx, view, tank) {
   if (!image?.complete || image.naturalWidth === 0) return;
   const glass = getGlassBounds(view);
   const size = level >= 2 ? 96 : 76;
-  const x = glass.right - size - 34;
-  const y = view.height - 46 - size;
+  const defaultX = glass.right - size - 34;
+  const defaultY = view.height - 46 - size;
+  const position = tank?.filterPosition;
+  const x = position ? glass.left + position.x * glass.width - size / 2 : defaultX;
+  const y = position ? glass.top + position.y * (view.height - glass.top - 16) - size / 2 : defaultY;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(image, x, y, size, size);
   const time = performance.now() / (level >= 2 ? 620 : 850);

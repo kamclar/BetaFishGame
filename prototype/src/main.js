@@ -5,12 +5,12 @@ import { fishRenderScale } from "./art/fishArt.js";
 import { loadFishSpriteAssets } from "./art/spriteAssets.js";
 import { ensureAnatomyV6TestFish, ensureStarterSchool, fish, palette, plants, tanks, updateStarterSchoolVisuals } from "./data/fishData.js";
 import { applySpeciesMetadata } from "./data/speciesData.js";
-import { createPlant, plantTypes, plantTypeOrder } from "./data/plantData.js";
+import { createPlant, plantTypes } from "./data/plantData.js";
 import { diseaseDatabase } from "./data/healthData.js";
 import { initializeLifecycle, updateLifecycle } from "./systems/lifecycleSystem.js";
 import { addTankSnail, applyTankEffects, changeWater, ensureWaterChemistry, formatCompactWaterTest, formatGameTime, formatWaterTest, gameClock, scrapeAlgae, updateWorld, vacuumTank, waterTestAdvice, waterTestResult } from "./systems/tankSystem.js";
 import { actionCosts, addSkillExperience, addSupply, canAfford, consumeSupply, economy, ensureDailyGoals, initializeEconomy, isShopUnlocked, payForAction, recordAction, shopUnlocks, skillInfo, supplyCount, taskText } from "./systems/economySystem.js";
-import { clearSavedGame, loadGame, restoreArray, restoreObject, saveGame } from "./systems/saveSystem.js";
+import { clearSavedGame, deleteSaveSlot, listSaveSlots, loadFromSlot, loadGame, restoreArray, restoreObject, saveGame, saveToSlot } from "./systems/saveSystem.js";
 import { t } from "./i18n/index.js";
 import { addMysteryEggs, initializeBreeding, updateSpawning } from "./systems/breedingSystem.js";
 import { prepareForSale, startLiveSales, updateLiveSales } from "./systems/salesSystem.js";
@@ -40,6 +40,8 @@ const canvas = document.getElementById("aquarium");
 const ctx = canvas.getContext("2d");
 const ui = createUi();
 const hudToggle = document.getElementById("hudToggle");
+const savePanel = document.getElementById("savePanel");
+const saveSlotList = document.getElementById("saveSlotList");
 loadFishSpriteAssets();
 restoreSavedGame();
 ensureAnatomyV6TestFish();
@@ -60,6 +62,7 @@ if (existingEldritchPreview) {
 }
 initializeEconomy(gameClock.day);
 initializeTutorial(economy);
+ensureDailyGoals(gameClock.day);
 if (!economy.starterSchoolAdded) {
   ensureStarterSchool(fish);
   economy.starterSchoolAdded = true;
@@ -80,7 +83,7 @@ for (const [tankId, tank] of Object.entries(tanks)) {
   if (tank.lastTest && tank.lastTest.oxygen == null) tank.lastTest = null;
 }
 applySpeciesMetadata(fish);
-ensureContract(economy);
+if (economy.tutorial?.completed) ensureContract(economy);
 for (const item of fish) initializeLifecycle(item);
 initializeBreeding(fish);
 initializePedigreeArchive(economy, fish);
@@ -93,6 +96,7 @@ let lastTime = performance.now();
 let currentTank = "main";
 let nextPlantX = 220;
 let heldItem = null;
+let selectedPlantType = null;
 let pointer = { x: -100, y: -100 };
 let toolCursor = { x: -100, y: -100 };
 let toolDirectionAnchor = null;
@@ -132,7 +136,26 @@ function refreshTutorial() {
 
 function handleTutorialEvent(type, detail = "") {
   const event = detail ? `${type}:${detail}` : type;
-  if (advanceTutorial(economy, event)) refreshTutorial();
+  const completedStep = advanceTutorial(economy, event);
+  if (!completedStep) return;
+  if (completedStep.phase === "guide") {
+    const skillChange = addSkillExperience(completedStep.skillXp ?? 0);
+    if (completedStep.skillXp) handleSkillChange(skillChange);
+    addJournalEntry(ui, `Průvodní úkol dokončen: ${guideTaskTitle(completedStep.id)}${completedStep.skillXp ? ` · +${completedStep.skillXp} zkušenosti` : ""}.`);
+  }
+  if (completedStep.storyAction) {
+    recordStoryAction(economy, completedStep.storyAction);
+    unlockStoryChapters();
+  }
+  if (economy.tutorial.completed && ensureDailyGoals(gameClock.day)) {
+    renderDailyGoals(ui, economy.dailyGoals);
+    addJournalEntry(ui, "Odemkly se běžné chovatelské úkoly. Nový úkol nahradí předchozí vždy po jeho splnění.");
+  }
+  refreshTutorial();
+}
+
+function guideTaskTitle(id) {
+  return ({ clean_tank: "Údržba nádrže", plant_balance: "Rovnováha rostlin", first_brood: "První odchov", first_sale: "První prodej", independent: "Průvodní část" })[id] ?? "Další krok";
 }
 
 ui.tutorialContinue.addEventListener("click", () => handleTutorialEvent("continue"));
@@ -193,10 +216,7 @@ function update(delta) {
   updateLiquidClouds(delta);
   updateWorld(delta, tanks, plants, fish, (day) => {
     addJournalEntry(ui, t("event.day_started", { day }));
-    if (ensureDailyGoals(day)) {
-      renderDailyGoals(ui, economy.dailyGoals);
-      addJournalEntry(ui, `Den ${day}: byly pripraveny tri nove chovatelske cile.`);
-    }
+    ensureDailyGoals(day);
   });
   updateSpawning(
     delta,
@@ -215,6 +235,10 @@ function update(delta) {
         ? `Z jiker ryb ${parents[0].name} a ${parents[1].name} se vylihl poter: ${names}.`
         : `Ze zakoupenych jiker se vylihl poter: ${names}.`;
       addJournalEntry(ui, message);
+      if (parents.length === 2) {
+        recordStoryAction(economy, "brood");
+        unlockStoryChapters();
+      }
       const anomalyEntry = eldritchJournalEntry(babies);
       if (anomalyEntry) addJournalEntry(ui, anomalyEntry);
     },
@@ -224,7 +248,7 @@ function update(delta) {
     addJournalEntry(ui, `Zakaznik koupil rybu ${item.name} za ${price} penez.`);
     handleSkillChange(addSkillExperience((item.health ?? 0) >= 85 ? 2 : 1));
     completeAction("sell");
-    const contractResult = recordContractSale(item, economy);
+    const contractResult = economy.tutorial?.completed ? recordContractSale(item, economy) : null;
     if (contractResult) {
       handleSkillChange(addSkillExperience(contractResult.skillXp));
       addJournalEntry(ui, `Zakazka splnena. Bonus ${contractResult.reward} penez a +${contractResult.skillXp} zkusenosti.`);
@@ -305,6 +329,7 @@ function draw() {
   maskAquariumEdges(ctx, view);
   drawGlass(ctx, view);
   refreshFishCard(ui, selectedFish);
+  drawFishCardPortrait(selectedFish);
   ui.gameDay.textContent = t("ui.day", { day: gameClock.day });
   ui.gameTime.textContent = `${formatGameTime()} · ${dayPeriod(gameClock.minute)}`;
   const lastWaterTest = tanks[currentTank].lastTest;
@@ -319,8 +344,40 @@ function draw() {
   ui.skillStatus.textContent = `Zkus. ${skill.value} · ${skill.name}`;
   document.getElementById("foodDoseCount").textContent = `${supplyCount("food")} davek`;
   ui.currentTask.textContent = taskText();
-  ui.customerContract.textContent = contractText(ensureContract(economy));
+  ui.customerContract.textContent = economy.tutorial?.completed
+    ? contractText(ensureContract(economy))
+    : "Zakázky se odemknou po průvodních úkolech";
   updateMaintenanceShelf();
+}
+
+function drawFishCardPortrait(item) {
+  if (!item || !ui.fishPortrait || !ui.appShell.classList.contains("show-card")) return;
+  const portrait = ui.fishPortrait;
+  const portraitCtx = portrait.getContext("2d");
+  const width = portrait.width;
+  const height = portrait.height;
+  portraitCtx.clearRect(0, 0, width, height);
+  const water = portraitCtx.createLinearGradient(0, 0, 0, height);
+  water.addColorStop(0, "#294b52");
+  water.addColorStop(0.58, "#18353c");
+  water.addColorStop(1, "#10252b");
+  portraitCtx.fillStyle = water;
+  portraitCtx.fillRect(0, 0, width, height);
+  portraitCtx.fillStyle = "rgba(115, 181, 178, .13)";
+  portraitCtx.fillRect(0, 17, width, 2);
+  portraitCtx.fillRect(0, 21, width, 1);
+  for (let bubble = 0; bubble < 7; bubble += 1) {
+    const x = 18 + ((bubble * 47 + 13) % (width - 30));
+    const y = 15 + ((bubble * 29 + 9) % (height - 27));
+    portraitCtx.strokeStyle = `rgba(173, 222, 214, ${0.12 + (bubble % 3) * 0.05})`;
+    portraitCtx.strokeRect(x, y, 2 + bubble % 3, 2 + bubble % 3);
+  }
+  const previewSize = Math.max(1.85, Math.min(2.55, (item.size ?? 2) * 1.12));
+  const preview = { ...item, x: width / 2, y: height / 2 + 5, dir: 1, size: previewSize, growthScale: 1 };
+  drawFish(portraitCtx, preview, { palette, getActiveSymptoms, selectedFish: null });
+  portraitCtx.strokeStyle = "#4f7377";
+  portraitCtx.lineWidth = 3;
+  portraitCtx.strokeRect(1.5, 1.5, width - 3, height - 3);
 }
 
 function selectFish(item) {
@@ -344,6 +401,7 @@ function showFishPage(page) {
 }
 
 let atlasPage = "fish";
+let shopCategory = "fish";
 
 function drawAtlasThumbnail(canvas, fishSnapshot) {
   const preview = canvas.getContext("2d");
@@ -383,7 +441,7 @@ function openJournal() {
 }
 
 function unlockStoryChapters() {
-  const unlocked = updateStory(economy, { tanks, plants, fish });
+  const unlocked = updateStory(economy, { tanks, plants, fish, gameClock });
   for (const chapter of unlocked) addJournalEntry(ui, `Nalezena nova stranka deniku: ${chapter.title}.`);
   if (unlocked.length) renderStoryChapters(ui, storyChapters(economy));
 }
@@ -403,6 +461,11 @@ function closeShop() {
   ui.appShell.classList.remove("show-shop");
 }
 
+function selectShopCategory(category) {
+  shopCategory = category;
+  refreshShop();
+}
+
 function buySnail() {
   if (!requireShopUnlock("snail")) return;
   if (!spendForAction("snail")) return;
@@ -416,6 +479,21 @@ function buyFood() {
   addSupply("food", supplyPackSizes.food);
   refreshShop();
   addJournalEntry(ui, "Koupena nova krabicka vlocek: 12 davek.");
+}
+
+function choosePlantFromShop(type) {
+  if (!plantTypes[type]) return;
+  const purchaseAction = plantTypes[type].shopAction ?? "plant";
+  if (!canAfford(purchaseAction)) {
+    addJournalEntry(ui, t("event.no_money", { day: gameClock.day, cost: actionCosts[purchaseAction] ?? 0 }));
+    return;
+  }
+  selectedPlantType = type;
+  setHeldItem("plant");
+  if (heldItem === "plant") {
+    closeShop();
+    addLog(ui, `V ruce: ${plantTypes[type].name}. Klikni na misto v nadrzi.`);
+  }
 }
 
 function buyEggs() {
@@ -432,11 +510,19 @@ function buyEggs() {
 }
 
 function buyFilterUpgrade() {
-  if (!requireShopUnlock("filter") || (tanks[currentTank].filterLevel ?? 1) >= 2) return;
+  if (!requireShopUnlock("filter")) return;
+  if ((tanks[currentTank].filterLevel ?? 1) >= 2) {
+    setHeldItem("filterPlace");
+    closeShop();
+    addLog(ui, "Premisteni filtru: klikni na nove misto na zadnim skle.");
+    return;
+  }
   if (!spendForAction("filterUpgrade")) return;
   tanks[currentTank].filterLevel = 2;
   refreshShop();
-  addJournalEntry(ui, `Do nadrze ${tanks[currentTank].name} byl nainstalovan Tichy filtr II.`);
+  setHeldItem("filterPlace");
+  closeShop();
+  addJournalEntry(ui, `Tichy filtr II je pripraveny k instalaci. Klikni na misto v nadrzi.`);
 }
 
 function buyHeater() {
@@ -466,18 +552,30 @@ function refreshShop() {
   document.getElementById("shopBalance").textContent = `${economy.coins} penez`;
   const skill = skillInfo();
   document.getElementById("shopSkill").textContent = `${skill.name} · zkusenost ${skill.value}${skill.nextAt ? `/${skill.nextAt}` : ""}`;
+  for (const tab of document.querySelectorAll("[data-shop-tab]")) {
+    tab.classList.toggle("active", tab.dataset.shopTab === shopCategory);
+  }
   for (const product of document.querySelectorAll("[data-shop-item]")) {
     const id = product.dataset.shopItem;
-    const unlocked = isShopUnlocked(id);
+    product.hidden = product.dataset.shopCategory !== shopCategory;
+    const plantType = product.dataset.plantType;
+    if (plantType && plantTypes[plantType]) {
+      product.querySelector("strong").textContent = plantTypes[plantType].name;
+      product.querySelector("small").textContent = plantTypes[plantType].shopDescription;
+    }
+    const unlocked = isShopUnlocked(plantType ? "plant" : id);
     const purchased = (id === "filter" && (tanks[currentTank].filterLevel ?? 1) >= 2)
       || (id === "heater" && tanks[currentTank].heater)
       || (id === "aerator" && tanks[currentTank].aerator);
-    product.disabled = !unlocked || purchased;
+    product.disabled = !unlocked || (purchased && id !== "filter");
     product.classList.toggle("locked", !unlocked);
     const price = product.querySelector("b");
-    const priceAction = { food: "foodPack", snail: "snail", eggs: "eggs", filter: "filterUpgrade", heater: "heater", aerator: "aerator" }[id];
+    const priceAction = plantType ? plantTypes[plantType]?.shopAction
+      : { food: "foodPack", snail: "snail", eggs: "eggs", filter: "filterUpgrade", heater: "heater", aerator: "aerator" }[id];
     const configuredPrice = actionCosts[priceAction] ?? 0;
-    if (price) price.textContent = purchased ? "Koupeno" : unlocked ? `${configuredPrice} penez` : `Zkus. ${shopUnlocks[id]}`;
+    const unlockId = plantType ? "plant" : id;
+    if (price) price.textContent = purchased ? (id === "filter" ? "Premistit" : "Koupeno")
+      : unlocked ? `${configuredPrice} penez` : `Zkus. ${shopUnlocks[unlockId]}`;
   }
 }
 
@@ -637,10 +735,16 @@ document.querySelectorAll("[data-atlas-tab]").forEach((button) => button.addEven
   refreshAtlas();
 }));
 document.getElementById("shopCloseButton").addEventListener("click", closeShop);
+for (const tab of document.querySelectorAll("[data-shop-tab]")) {
+  tab.addEventListener("click", () => selectShopCategory(tab.dataset.shopTab));
+}
 document.getElementById("testTrayClose").addEventListener("click", cancelWaterTest);
 document.getElementById("finishWaterTest").addEventListener("click", finishWaterTest);
 for (const vial of document.querySelectorAll(".test-vial")) vial.addEventListener("click", () => developWaterTest(vial));
 document.getElementById("buyFoodButton").addEventListener("click", buyFood);
+for (const product of document.querySelectorAll("[data-plant-type]")) {
+  product.addEventListener("click", () => choosePlantFromShop(product.dataset.plantType));
+}
 document.getElementById("buySnailButton").addEventListener("click", buySnail);
 document.getElementById("buyEggsButton").addEventListener("click", buyEggs);
 document.getElementById("buyFilterButton").addEventListener("click", buyFilterUpgrade);
@@ -661,8 +765,9 @@ for (const tab of ui.tankTabs) {
 
 for (const button of document.querySelectorAll("[data-window-action]")) {
   button.addEventListener("click", () => {
-    if (!window.desktopWindow) return;
     const action = button.dataset.windowAction;
+    if (action === "saves") { openSavePanel(); return; }
+    if (!window.desktopWindow) return;
     if (action === "minimize") window.desktopWindow.minimize();
     if (action === "pin") window.desktopWindow.toggleAlwaysOnTop();
     if (action === "close") window.desktopWindow.close();
@@ -670,8 +775,63 @@ for (const button of document.querySelectorAll("[data-window-action]")) {
   });
 }
 
+document.getElementById("savePanelClose").addEventListener("click", () => { savePanel.hidden = true; });
+
+function currentSaveState() {
+  return { fish, plants, tanks, economy, gameClock };
+}
+
+function openSavePanel() {
+  const slots = listSaveSlots();
+  saveSlotList.replaceChildren(...slots.map((slot, index) => {
+    const row = document.createElement("article");
+    row.className = "save-slot";
+    const info = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = `Pozice ${index + 1}`;
+    const details = document.createElement("small");
+    details.textContent = slot
+      ? `Den ${slot.day}, ${String(Math.floor(slot.minute / 60)).padStart(2, "0")}:${String(slot.minute % 60).padStart(2, "0")} · ${slot.coins} penez · ${slot.fishCount} ryb · ${new Date(slot.savedAt).toLocaleString("cs-CZ")}`
+      : "Prazdna pozice";
+    info.append(title, details);
+    const actions = document.createElement("div");
+    actions.className = "save-slot-actions";
+    const saveButton = document.createElement("button");
+    saveButton.textContent = slot ? "Prepsat" : "Ulozit";
+    saveButton.addEventListener("click", () => {
+      if (slot && !window.confirm(`Prepsat pozici ${index + 1} soucasnou hrou?`)) return;
+      persistGame();
+      saveToSlot(index, currentSaveState());
+      openSavePanel();
+    });
+    actions.append(saveButton);
+    if (slot) {
+      const loadButton = document.createElement("button");
+      loadButton.textContent = "Nacist";
+      loadButton.addEventListener("click", () => {
+        if (!window.confirm(`Nacist pozici ${index + 1}? Neulozene zmeny v soucasne hre se ztrati.`)) return;
+        resettingGame = true;
+        loadFromSlot(index);
+        location.reload();
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "danger";
+      deleteButton.textContent = "Smazat";
+      deleteButton.addEventListener("click", () => {
+        if (!window.confirm(`Smazat pozici ${index + 1}?`)) return;
+        deleteSaveSlot(index);
+        openSavePanel();
+      });
+      actions.append(loadButton, deleteButton);
+    }
+    row.append(info, actions);
+    return row;
+  }));
+  savePanel.hidden = false;
+}
+
 function restartGame() {
-  const confirmed = window.confirm("Opravdu zacit novou hru? Ulozene ryby, penize a postup budou smazany.");
+  const confirmed = window.confirm("Opravdu zacit novou hru? Soucasna rozehrana hra se smaze, ale pozice v nabidce Ulozeni zustanou zachovane.");
   if (!confirmed) return;
   resettingGame = true;
   clearSavedGame();
@@ -708,6 +868,7 @@ function setHeldItem(action) {
     addJournalEntry(ui, t("event.no_money", { day: gameClock.day, cost: actionCosts[action] ?? 0 }));
     return;
   }
+  if (!action && heldItem === "plant") selectedPlantType = null;
   if (!action && heldItem === "clean" && !(tanks[currentTank].waterRemoved > 0)) tanks[currentTank].waterChangeActive = false;
   if (!action && heldItem === "test" && !waterTestSession?.ready) {
     waterTestSession = null;
@@ -730,7 +891,8 @@ function setHeldItem(action) {
   }
   if (heldItem === "feed") addLog(ui, "V ruce: vlocky. Klikni do vody.");
   if (heldItem === "test") addLog(ui, "Zkumavka: podrž ji ve vodě, dokud se nenaplní.");
-  if (heldItem === "plant") addLog(ui, "V ruce: rostlina. Klikni na misto v nadrzi.");
+  if (heldItem === "plant" && selectedPlantType) addLog(ui, `V ruce: ${plantTypes[selectedPlantType].name}. Klikni na misto v nadrzi.`);
+  if (heldItem === "filterPlace") addLog(ui, "V ruce: Tichy filtr II. Klikni na zadni sklo nadrze.");
   if (heldItem === "medicine") addLog(ui, "V ruce: lek. Klikni do vody nebo pouzij kartu ryby.");
   if (heldItem === "clean") {
     tanks[currentTank].waterChangeActive = true;
@@ -768,8 +930,8 @@ function useHeldItem(x, y) {
   }
 
   if (heldItem === "plant") {
-    if (!spendForAction("plant")) return;
-    const type = plantTypeOrder[plants[currentTank].length % plantTypeOrder.length];
+    const type = selectedPlantType ?? "vallisneria";
+    if (!spendForAction(plantTypes[type]?.shopAction ?? "plant")) return;
     const plant = createPlant(type, x, 70 + Math.random() * 70, Math.random() * Math.PI * 2);
     plants[currentTank].push(plant);
     tanks[currentTank].waterQuality = Math.min(1, tanks[currentTank].waterQuality + plantTypes[type].waterBonus);
@@ -778,6 +940,22 @@ function useHeldItem(x, y) {
     const troubleSource = tanks[currentTank].plantTrouble;
     if (troubleSource) exposeTankToTrouble(troubleSource, fish, currentTank, (text) => addLog(ui, text));
     completeAction("plant");
+    selectedPlantType = null;
+  }
+
+  if (heldItem === "filterPlace") {
+    const view = getView();
+    const glass = getGlassBounds(view);
+    const tankHeight = view.height - glass.top - 16;
+    const size = 96;
+    const centerX = Math.max(glass.left + size / 2, Math.min(glass.right - size / 2, x));
+    const centerY = Math.max(getSurfaceY(view, tanks[currentTank]) + size / 2,
+      Math.min(view.height - 16 - size / 2, y));
+    tanks[currentTank].filterPosition = {
+      x: (centerX - glass.left) / glass.width,
+      y: (centerY - glass.top) / tankHeight,
+    };
+    addJournalEntry(ui, `Tichy filtr II byl nainstalovan v nadrzi ${tanks[currentTank].name}.`);
   }
 
   if (heldItem === "medicine") {
@@ -847,7 +1025,7 @@ function restoreSavedGame() {
 
 function persistGame() {
   if (resettingGame) return;
-  saveGame({ fish, plants, tanks, economy, gameClock });
+  saveGame(currentSaveState());
 }
 
 setInterval(persistGame, 10000);

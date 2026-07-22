@@ -6,10 +6,10 @@ Texty používané hrou jsou uložené v prototype/src/i18n/csTutorial.js a csSt
 
 
 ============================================================
-TUTORIAL
+PRŮVODNÍ ÚKOLY
 ============================================================
 
-KROK 1 Z 7
+PRŮVODNÍ ÚKOL 1 Z 10
 Název: Akvárium po strýci
 
 Strýc je už několik týdnů pryč. Nikdo neví, kam odešel. O akvárium se mezitím nikdo nestaral a ryb ti bylo líto. Vzala sis proto klíče od jeho bytu.
@@ -17,50 +17,76 @@ Strýc je už několik týdnů pryč. Nikdo neví, kam odešel. O akvárium se m
 Tlačítko: Podívat se k nádrži
 
 
-KROK 2 Z 7
-Název: Jsou ještě v pořádku?
+PRŮVODNÍ ÚKOL 2 Z 10
+Název: Nejdřív se podívám na ryby
 
-Některé ryby připlavou ke sklu, když se přiblížíš. Klikni na jednu z nich a pořádně si ji prohlédni.
-
-
-KROK 3 Z 7
-Název: Krmení je v levé zásuvce
-
-Na krabičce je strýcovým písmem napsáno: Jedna dávka denně. Když něco zůstane na dně, bylo toho moc. Vezmi vločky z police a klikni do vody.
+Některé připlouvají ke sklu, když se přiblížím. Prohlédnu si jednu z nich a zjistím, v jakém je stavu.
 
 
-KROK 4 Z 7
-Název: Vodu nejde poznat pohledem
+PRŮVODNÍ ÚKOL 3 Z 10
+Název: Ryby vypadají hladově
 
-Vedle krmení leží testovací sada. Víčko je odřené častým používáním. Vezmi ji a klikni do nádrže.
-
-
-KROK 5 Z 7
-Název: Čísla na štítku
-
-Výsledek se ukázal nahoře. Amoniak a dusitany by měly zůstat co nejníž. Strýc si každé měření zapisoval. Možná po něm někde zůstal sešit.
-
-Tlačítko: Hledat dál
+Nejdřív se podívám na krmení. Na krabičce je strýcovým písmem napsáno: Jedna dávka denně. Když něco zůstane na dně, bylo toho moc.
 
 
-KROK 6 Z 7
-Název: Sešit pod policí
+PRŮVODNÍ ÚKOL 4 Z 10
+Název: Voda nevypadá dobře
 
-Je zasunutý až vzadu pod nádrží. Na deskách jsou mapy suchych kapek a strýcovy iniciály. Otevři deník na polici.
-
-
-KROK 7 Z 7
-Název: Pro dnešek
-
-Ryby jsou nakrmené a voda změřená. V sešitě zůstala spousta poznámek. Některé stránky někdo vytrhl. Zatím raději budu dělat to co dělal strýc každý den.
-
-Tlačítko: Postarat se o akvárium
+Vedle krmení leží testovací sada. Strýc ji zřejmě používal často. Vezmu ji a otestuji vodu v nádrži.
 
 
-DALŠÍ TEXTY TUTORIALU
+PRŮVODNÍ ÚKOL 5 Z 10
+Název: Strýc si výsledky zapisoval
 
-Ukazatel postupu: Krok {current} z {total}
-Možnost ukončení: Přeskočit tutorial
+Pod policí je zasunutý sešit s mapami suchých kapek na deskách. Podívám se, co si do něj psal.
+
+
+PRŮVODNÍ ÚKOL 6 Z 10
+Název: Nejdřív test, potom výměna
+
+U dna zůstala vrstva kalu. Odkalím část dna a odebranou vodu potom doplním. Třeba pochopím, proč strýc měřil vždy před údržbou.
+
+
+PRŮVODNÍ ÚKOL 7 Z 10
+Název: Nádrž potřebuje rovnováhu
+
+Samotné čištění nestačí. Přidám rostlinu, která spotřebuje část dusíku a přes den pomůže s kyslíkem.
+
+
+PRŮVODNÍ ÚKOL 8 Z 10
+Název: Poznámky o třecí nádrži
+
+Strýc vedl rodokmeny ryb velmi pečlivě. Přesunu do třecí nádrže zdravý pár opačného pohlaví a počkám na jikry.
+
+
+PRŮVODNÍ ÚKOL 9 Z 10
+Název: Akvárium se musí uživit
+
+Připravím zdravou rybu k prodeji a nechám ji vybrat zákazníkem. Nemocnou ani silně vystresovanou rybu prodávat nechci.
+
+
+PRŮVODNÍ ÚKOL 10 Z 10
+Název: Teď už je péče na mně
+
+Základní chod nádrže zvládám. Budu pokračovat v chovatelských úkolech a zakázkách. Další strýcovy stránky možná najdu, až budu vědět, kde hledat.
+
+Tlačítko: Pokračovat
+
+
+DALŠÍ TEXTY PRŮVODNÍCH ÚKOLŮ
+
+Ukazatel postupu: Průvodní úkol {current} z {total}
+Možnost přeskočení vysvětlení: Přeskočit vysvětlení ovládání
+
+
+NÁVAZNOST NA DENÍK
+
+Otevření deníku odemkne stránku: Sešit pod policí.
+Dokončení testu a následné údržby odemkne stránku: Papírek založený u testů.
+Přidání rostliny připraví odemčení stránky: Nádrž číslo dvě. Stránka se objeví až ve stabilní zarostlé nádrži.
+Vylíhnutí prvního potomstva známých rodičů odemkne stránku: První snůška.
+
+Další stránky nejsou součástí průvodních úkolů. Vyžadují chovatelský postup, konkrétní genetické znaky nebo náhodný nález za správných podmínek. Vyšší úroveň sama o sobě eldritch stránku neodemkne.
 
 
 ============================================================

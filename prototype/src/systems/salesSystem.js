@@ -1,11 +1,14 @@
 import { customerCount } from "../data/customerData.js";
 import { salesConfig } from "../config/salesConfig.js";
+import { colorLineForFish, colorLineValueMultiplier } from "../config/colorLineConfig.js";
 
 export function fishValue(item) {
   const base = salesConfig.rarityValue[item.rarity] ?? salesConfig.rarityValue.Common;
   const healthFactor = salesConfig.healthValueMin + (item.visibleHealth ?? item.health) / 100 * salesConfig.healthValueRange;
   const ageFactor = salesConfig.ageValue[item.lifeStage] ?? salesConfig.ageValue.other;
-  return Math.max(salesConfig.minimumPrice, Math.round(base * healthFactor * ageFactor + item.traits.length * salesConfig.traitValue + (item.parents?.length ? salesConfig.pedigreeValue : 0)));
+  const ordinaryValue = base * healthFactor * ageFactor + item.traits.length * salesConfig.traitValue
+    + (item.parents?.length ? salesConfig.pedigreeValue : 0);
+  return Math.max(salesConfig.minimumPrice, Math.round(ordinaryValue * colorLineValueMultiplier(item)));
 }
 
 export function prepareForSale(item) {
@@ -21,7 +24,8 @@ export function runSalesDay(fish) {
   const offered = fish.filter((item) => item.tank === "sale");
   const sold = [], unsold = [];
   for (const item of offered) {
-    const appeal = 0.4 + Math.min(0.42, item.traits.length * 0.08 + (item.rarity !== "Common" ? 0.14 : 0));
+    const appeal = 0.4 + Math.min(0.42, item.traits.length * 0.08
+      + (item.rarity !== "Common" ? 0.14 : 0) + (colorLineForFish(item) ? 0.12 : 0));
     if (Math.random() < Math.min(appeal, purchaseChance(item))) sold.push({ item, price: item.salePrice ?? fishValue(item) });
     else { item.stress = Math.min(100, item.stress + 8); unsold.push(item); }
   }
@@ -107,7 +111,8 @@ function customerScore(item, type) {
   const illnessPenalty = item.diseases?.length ? 300 : item.symptoms?.length ? 95 : 0;
   if (type === 0) return 100 - (item.salePrice ?? 10) + item.traits.length * 4 - illnessPenalty;
   if (type === 1) return item.health + item.traits.length * 8 - illnessPenalty;
-  if (type === 2) return rarity * 3 + (item.pattern === "glow" ? 35 : 0) - illnessPenalty;
+  if (type === 2) return rarity * 3 + (item.pattern === "glow" ? 35 : 0)
+    + (colorLineForFish(item)?.valueBonus ?? 0) * 160 - illnessPenalty;
   return item.health + (item.parents?.length ? 25 : 0) - illnessPenalty;
 }
 

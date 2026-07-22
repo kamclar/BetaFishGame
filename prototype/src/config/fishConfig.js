@@ -32,6 +32,16 @@ export const lifeStages = {
 };
 export const lifeStageOrder = ["fry", "juvenile", "youngAdult", "adult", "old"];
 export const treatmentDurationDays = { normal: 0.75, quarantine: 1.5 };
+export const eelVisualAnimationConfig = {
+  phaseSpeed: 0.72,
+  waveLength: 0.078,
+  centerlineAmplitude: 0.24,
+  secondaryAmplitude: 0.06,
+  minimumRearInfluence: 0.12,
+  profileCompression: 0.16,
+  shimmerThreshold: 0.2,
+  shimmerAlpha: 0.34,
+};
 export const healthTuning = {
   robustDiseaseFactor: 0.55,
   contagiousCheckDays: 0.25,

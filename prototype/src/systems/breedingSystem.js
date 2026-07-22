@@ -71,9 +71,10 @@ export function breedPair(a, b, fish, count = 2, context = {}) {
     assignOffspringGeneticHealth(baby, a, b, context.pedigreeArchive);
     if (Math.random() < breedingConfig.colorMutationChance) {
       const mutation = breedingConfig.inheritableColors[Math.floor(Math.random() * breedingConfig.inheritableColors.length)];
-      baby.genotype.color[Math.floor(Math.random() * 2)] = mutation;
-      baby.color = mutation;
-      baby.history.push(`Objevila se nova barevna mutace: ${mutation}.`);
+      const pigmentKey = ["color", "patternColor", "accentColor"][Math.floor(Math.random() * 3)];
+      baby.genotype[pigmentKey][Math.floor(Math.random() * 2)] = mutation;
+      baby[pigmentKey] = mutation;
+      baby.history.push(`Objevila se nova barevna mutace pigmentu: ${mutation}.`);
     }
     applyEldritchLineage(baby, a, b, context);
     fish.push(baby); a.offspring.push(id); b.offspring.push(id);

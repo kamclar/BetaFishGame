@@ -3,8 +3,9 @@ export const economyDefaults = {
   dailyGoals: [], goalDay: 0, supplies: { food: 12 },
 };
 
-export const dailyGoalCount = 3;
-export const dailyGoalOffsets = [0, 2, 4];
+// Dva prubezne ukoly. Neexpiruji o pulnoci, novy se objevi az po splneni stareho.
+export const dailyGoalCount = 2;
+export const dailyGoalOffsets = [0, 2];
 export const dailyGoalTemplates = [
   { id: "feed", label: "Nakrm ryby", target: 2, reward: 6, skillXp: 1 },
   { id: "test", label: "Otestuj vodu", target: 1, reward: 4, skillXp: 1 },
@@ -20,9 +21,11 @@ export const skillRanks = [
   { min: 50, name: "Mistr chovu" },
 ];
 
-export const shopUnlocks = { food: 0, snail: 8, eggs: 15, filter: 25, heater: 8, aerator: 8 };
+export const shopUnlocks = { food: 0, plant: 0, snail: 8, eggs: 15, filter: 25, heater: 8, aerator: 8 };
 export const actionCosts = {
-  feed: 0, foodPack: 10, plant: 8, medicine: 6, clean: 0, test: 0, scrape: 0,
+  feed: 0, foodPack: 10, plant: 8, plantVallisneria: 8, plantAnubias: 12,
+  plantLudwigia: 10, plantFern: 14, plantFloating: 16,
+  medicine: 6, clean: 0, test: 0, scrape: 0,
   snail: 45, eggs: 28, filterUpgrade: 65, heater: 55, aerator: 48,
 };
 export const supplyPackSizes = { food: 12 };

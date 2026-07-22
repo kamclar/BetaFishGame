@@ -11,6 +11,8 @@ export const plantTypes = {
     heightPotential: 0.96,
     spread: 1.18,
     variantCount: 4,
+    shopAction: "plantVallisneria",
+    shopDescription: "Rychla vysoka trava. Tvori husty ukryt u zadni steny.",
   },
   anubias: {
     name: "Anubias kamenni",
@@ -22,6 +24,8 @@ export const plantTypes = {
     heightPotential: 0.48,
     spread: 1.42,
     variantCount: 4,
+    shopAction: "plantAnubias",
+    shopDescription: "Odolna sirokolista rostlina. Snese mene svetla a roste pomalu.",
   },
   redLudwigia: {
     name: "Ruducha medena",
@@ -33,6 +37,8 @@ export const plantTypes = {
     heightPotential: 0.88,
     spread: 1.24,
     variantCount: 4,
+    shopAction: "plantLudwigia",
+    shopDescription: "Medene stonky pro svetle nadrze. Roste rychleji, ale je citlivejsi.",
   },
   glowFern: {
     name: "Kapradina svetélkujici",
@@ -44,6 +50,8 @@ export const plantTypes = {
     heightPotential: 0.74,
     spread: 1.32,
     variantCount: 4,
+    shopAction: "plantFern",
+    shopDescription: "Kosata tyrkysova kapradina. Ma rada mirne svetlo a cistou vodu.",
   },
   floatingPlant: {
     name: "Pistie plovouci",
@@ -54,6 +62,8 @@ export const plantTypes = {
     waterBonus: 0.014,
     spread: 1.35,
     variantCount: 4,
+    shopAction: "plantFloating",
+    shopDescription: "Plave na hladine, stini vodu a spousti dlouhe koreny.",
   },
 };
 
